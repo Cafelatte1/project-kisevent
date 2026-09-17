@@ -16,6 +16,7 @@
   --border: rgba(11, 11, 11, 0.10);
   --branch: #2a78d6;
   --banki: #1baf7a;
+  --pension: #b0672a;
   --good: #0ca30c;
   --warning: #fab219;
   --critical: #d03b3b;
@@ -33,6 +34,7 @@
     --border: rgba(255, 255, 255, 0.10);
     --branch: #3987e5;
     --banki: #199e70;
+    --pension: #d08a4a;
     --wash: rgba(255, 255, 255, 0.06);
   }
 }
@@ -47,6 +49,7 @@
   --border: rgba(255, 255, 255, 0.10);
   --branch: #3987e5;
   --banki: #199e70;
+  --pension: #d08a4a;
   --wash: rgba(255, 255, 255, 0.06);
 }
 
@@ -60,13 +63,12 @@ body {
 .wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 56px; }
 
 header.bar {
-  display: flex; flex-wrap: wrap; gap: 12px 16px;
-  align-items: baseline; justify-content: space-between;
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
   padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 20px;
 }
 h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-.bar .meta { color: var(--ink-2); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.bar .right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.bar .meta { color: var(--ink-2); font-size: 13px; }
+.bar .right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
 .state { font-size: 12px; color: var(--muted); }
 .state.err { color: var(--critical); }
 .pill {
@@ -74,33 +76,34 @@ h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
   border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; white-space: nowrap;
 }
 .pill.live { color: var(--ink); border-color: var(--warning); }
+.alert {
+  display: none; margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; font-size: 13px;
+  border: 1px solid var(--critical); color: var(--critical); background: var(--surface);
+}
+.alert.show { display: block; }
 
 button {
   font: inherit; color: var(--ink); background: var(--surface);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 7px 13px; cursor: pointer;
+  padding: 7px 13px; cursor: pointer; white-space: nowrap;
 }
 button:hover:not(:disabled) { background: var(--wash); }
 button:disabled { color: var(--muted); cursor: default; }
 
 .tiles {
-  display: grid; gap: 10px; margin-bottom: 8px;
+  display: grid; gap: 10px; margin-bottom: 22px;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
-.tile {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-  padding: 12px 14px;
-}
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
 .tile .label { color: var(--ink-2); font-size: 12px; }
 .tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; letter-spacing: -0.02em; }
 .tile.lead .value { font-size: 40px; }
-.tiles.small .tile .value { font-size: 20px; }
-.tiles.small { margin-bottom: 22px; }
+.tile.warn .value { color: var(--critical); }
 
 h2 { font-size: 14px; font-weight: 600; margin: 26px 0 10px; color: var(--ink-2); }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 12px; }
-.group { display: flex; gap: 6px; align-items: center; }
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .group > span { font-size: 12px; color: var(--muted); }
 .chip {
   border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
@@ -119,16 +122,14 @@ tbody tr.row:hover { background: var(--wash); }
 tbody tr.row[aria-selected="true"] { background: var(--wash); }
 td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .t-title { font-weight: 500; color: var(--ink); }
+.t-title.ended { color: var(--ink-2); font-weight: 400; }
 .dim { color: var(--muted); }
 
-.badge { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; color: var(--ink-2); }
-.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
-.dot.summarized { background: var(--good); }
-.dot.failed { background: var(--critical); }
 .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); margin-right: 4px; white-space: nowrap; }
 .tag.영업점 { border-color: var(--branch); color: var(--branch); }
 .tag.뱅키스 { border-color: var(--banki); color: var(--banki); }
-.tag.미상 { color: var(--muted); }
+.tag.연금 { border-color: var(--pension); color: var(--pension); }
+.tag.none { color: var(--muted); border-style: dashed; }
 
 #detail { margin: 18px 0 0; padding: 16px 18px; }
 #detail .head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
@@ -142,78 +143,73 @@ ul.list.caveat li { color: var(--critical); }
 .kv { color: var(--ink-2); }
 a { color: var(--branch); }
 .empty { padding: 18px; color: var(--muted); font-size: 13px; }
+details summary { cursor: pointer; color: var(--branch); font-size: 13px; }
+.banner { margin-top: 8px; max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.banner img { display: block; width: 100%; height: auto; }
 
 @media (max-width: 720px) {
   .hide-sm { display: none; }
   .tile .value { font-size: 22px; }
   .tile.lead .value { font-size: 32px; }
   th, td { padding: 8px 10px; }
+  .bar .right { margin-left: 0; width: 100%; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="bar">
-    <div>
-      <h1>KIS Event</h1>
-      <div class="meta">
-        <span id="last-run">마지막 수집 —</span>
-        <span id="next-run">다음 수집 —</span>
-      </div>
-    </div>
+    <h1>KIS Event</h1>
+    <span class="meta" id="last-run">마지막 수집 —</span>
     <div class="right">
       <span class="pill" id="crawl-pill">대기</span>
-      <span class="state err" id="crawl-err"></span>
       <span class="state" id="state"></span>
-      <button id="scrape-live">지금 동기화</button>
       <button id="scrape-backfill">과거 100건 백필</button>
     </div>
   </header>
 
-  <div class="tiles" id="tiles-main"></div>
-  <div class="tiles small" id="tiles-img"></div>
+  <div class="alert" id="alert"></div>
+
+  <div class="tiles" id="tiles"></div>
 
   <h2>이벤트</h2>
   <div class="filters">
     <div class="group" id="f-target"><span>대상</span></div>
     <div class="group" id="f-state"><span>상태</span></div>
-    <div class="group" id="f-status"><span>분석</span></div>
     <span class="state" id="count"></span>
   </div>
   <div class="card scroll">
     <table>
       <thead><tr>
-        <th>제목</th><th>대상</th><th>상태</th><th>기간</th><th class="hide-sm">템플릿</th>
-        <th>분석</th><th class="hide-sm">요약</th>
+        <th>제목</th><th>대상</th><th class="hide-sm">기간</th><th>요약</th>
       </tr></thead>
-      <tbody id="events"><tr><td colspan="7" class="empty">불러오는 중…</td></tr></tbody>
+      <tbody id="events"><tr><td colspan="4" class="empty">불러오는 중…</td></tr></tbody>
     </table>
   </div>
 
   <div class="card" id="detail" hidden></div>
 
-  <h2>최근 실행</h2>
+  <h2>수집 이력</h2>
   <div class="card scroll">
     <table>
       <thead><tr>
-        <th>시작</th><th>소요(초)</th><th>신규</th><th>갱신</th><th>이미지</th><th>오류</th>
+        <th>시작</th><th>모드</th><th>소요(초)</th><th>신규</th><th>갱신</th><th>이미지</th><th>오류</th>
       </tr></thead>
-      <tbody id="runs"><tr><td colspan="6" class="empty">불러오는 중…</td></tr></tbody>
+      <tbody id="runs"><tr><td colspan="7" class="empty">불러오는 중…</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <script>
-const STATUS_LABEL = { pending: "요약 대기", summarized: "요약 완료", failed: "실패" };
-const TARGETS = [["", "전체보기"], ["영업점", "영업점"], ["뱅키스", "뱅키스"], ["연금", "연금"], ["미상", "미상"]];
-const ANALYSIS = [["", "전체"], ["summarized", "요약 완료"], ["none", "미요약"]];
+const TARGETS = [["", "전체"], ["영업점", "영업점"], ["뱅키스", "뱅키스"], ["연금", "연금"], ["미상", "요약 전"]];
 const EVENT_STATES = [["ongoing", "진행중"], ["ended", "종료"], ["all", "전체"]];
-const STATE_LABEL = { ongoing: "진행중", ended: "종료" };
 const MODE_LABEL = { live: "라이브", backfill: "백필" };
+const POLL_IDLE_MS = 15000;
+const POLL_RUNNING_MS = 3000;
 
 const state = {
-  events: [], target: "", analysis: "", eventState: "ongoing",
-  selected: null, crawl: null, lastClick: 0, lockUntil: 0,
+  events: [], target: "", eventState: "ongoing",
+  selected: null, crawl: null, intervalMin: 15, lockUntil: 0, timer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -233,10 +229,32 @@ function fmtTime(iso) {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+function minutesSince(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+}
+
+function fmtAgo(iso) {
+  const m = minutesSince(iso);
+  if (m === null) return "—";
+  if (m < 1) return "방금";
+  if (m < 60) return `${m}분 전`;
+  if (m < 1440) return `${Math.floor(m / 60)}시간 전`;
+  return `${Math.floor(m / 1440)}일 전`;
+}
+
 function setState(text, isError) {
   const node = $("state");
   node.textContent = text || "";
   node.classList.toggle("err", !!isError);
+}
+
+function setAlert(text) {
+  const node = $("alert");
+  node.textContent = text || "";
+  node.classList.toggle("show", !!text);
 }
 
 async function getJSON(url) {
@@ -245,16 +263,10 @@ async function getJSON(url) {
   return res.json();
 }
 
-function tile(label, value, lead) {
-  const node = el("div", lead ? "tile lead" : "tile");
+function tile(label, value, cls) {
+  const node = el("div", cls ? `tile ${cls}` : "tile");
   node.append(el("div", "label", label), el("div", "value", value));
   return node;
-}
-
-function statusBadge(status) {
-  const badge = el("span", "badge");
-  badge.append(el("span", `dot ${status || ""}`), el("span", null, STATUS_LABEL[status] || "이미지 없음"));
-  return badge;
 }
 
 function summaryText(summary) {
@@ -263,57 +275,62 @@ function summaryText(summary) {
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }
 
-function targetTags(targetTypes) {
+function targetTags(targetTypes, summarized) {
   const box = el("span");
+  if (!summarized) {
+    box.append(el("span", "tag none", "요약 전"));
+    return box;
+  }
   if (!targetTypes || !targetTypes.length) {
-    box.append(el("span", "tag 미상", "미상"));
+    box.append(el("span", "tag none", "미상"));
     return box;
   }
   targetTypes.forEach((t) => box.append(el("span", `tag ${t}`, t)));
   return box;
 }
 
-function renderStats(stats) {
-  $("last-run").textContent = "마지막 수집 " + fmtTime(stats.last_run && stats.last_run.finished_at);
-  $("next-run").textContent = `다음 수집 ${fmtTime(stats.next_run_at)} (${stats.interval_min}분 주기)`;
+function renderStats(stats, runs) {
+  state.intervalMin = stats.interval_min;
+  // 실행 중인 run은 finished_at이 없으므로 마지막으로 끝난 run을 찾는다
+  const lastDone = runs.find((r) => r.finished_at) || null;
+  const finished = lastDone && lastDone.finished_at;
+  $("last-run").textContent = `마지막 수집 ${fmtAgo(finished)} · ${stats.interval_min}분 주기`;
 
-  const main = $("tiles-main");
-  main.replaceChildren(
-    tile("진행 중 이벤트", stats.events_active, true),
-    tile("종료 이벤트(최근 100건)", stats.events_ended ?? 0),
+  // 주기의 두 배를 넘겨도 수집이 없으면 서버·스케줄러가 멈춘 것으로 본다
+  const age = minutesSince(finished);
+  const running = stats.crawl && stats.crawl.state === "running";
+  if (!running && age !== null && age > stats.interval_min * 2) {
+    setAlert(`수집이 ${age}분째 없습니다 — 서버(run.bat)와 스케줄러를 확인하세요`);
+  } else if (!running && lastDone && lastDone.error) {
+    setAlert(`마지막 수집 실패: ${lastDone.error}`);
+  } else {
+    setAlert("");
+  }
+
+  $("tiles").replaceChildren(
+    tile("진행중 이벤트", stats.events_active, "lead"),
+    tile("요약 전(진행중)", stats.pending_ongoing, stats.pending_ongoing ? "warn" : ""),
     tile("영업점", stats.by_target["영업점"]),
     tile("뱅키스", stats.by_target["뱅키스"]),
-    tile("24시간 신규", stats.new_last_24h),
-  );
-
-  const imgs = $("tiles-img");
-  imgs.replaceChildren(
-    ...Object.keys(STATUS_LABEL).map((key) => tile(STATUS_LABEL[key], stats.images[key] ?? 0)),
+    tile("연금", stats.by_target["연금"]),
   );
 }
 
 function matchesTarget(event) {
   const types = event.target_types;
-  if (state.target === "미상") return !types || !types.length;
+  if (state.target === "미상") return event.summary_status === "none" || !types || !types.length;
   return !!types && types.includes(state.target);
 }
 
-function matches(event) {
-  if (state.target && !matchesTarget(event)) return false;
-  if (state.analysis === "summarized" && event.summary_status === "none") return false;
-  if (state.analysis === "none" && event.summary_status !== "none") return false;
-  return true;
-}
-
 function renderEvents() {
-  const rows = state.events.filter(matches);
+  const rows = state.target ? state.events.filter(matchesTarget) : state.events;
   const body = $("events");
   $("count").textContent = `${rows.length}건 / 전체 ${state.events.length}건`;
 
   if (!rows.length) {
     const tr = el("tr");
     const td = el("td", "empty", "조건에 맞는 이벤트가 없습니다");
-    td.colSpan = 7;
+    td.colSpan = 4;
     tr.append(td);
     body.replaceChildren(tr);
     return;
@@ -325,43 +342,39 @@ function renderEvents() {
     tr.onclick = () => selectEvent(event.num);
 
     const title = el("td");
-    title.append(el("div", "t-title", event.title));
+    title.append(el("div", event.state === "ended" ? "t-title ended" : "t-title", event.title));
+    if (event.state === "ended" && state.eventState === "all") title.append(el("div", "dim", "종료"));
     tr.append(title);
 
     const target = el("td");
-    target.append(targetTags(event.target_types));
+    target.append(targetTags(event.target_types, event.summary_status === "summarized"));
     tr.append(target);
 
-    const evState = el("td");
-    evState.append(el("span", "tag", STATE_LABEL[event.state] || event.state || "—"));
-    tr.append(evState);
-
-    tr.append(el("td", "num dim", `${event.period_start || "—"} ~ ${event.period_end || "—"}`));
-    tr.append(el("td", "hide-sm dim", event.template || "—"));
-
-    const status = el("td");
-    status.append(statusBadge(event.summary_status === "summarized" ? "summarized" : "pending"));
-    tr.append(status);
+    tr.append(el("td", "hide-sm num dim", `${event.period_start || "—"} ~ ${event.period_end || "—"}`));
 
     const text = summaryText(event.summary);
-    tr.append(text ? el("td", "hide-sm", text) : el("td", "hide-sm dim", "-"));
+    tr.append(text ? el("td", null, text) : el("td", "dim", "-"));
     return tr;
   }));
 }
 
 function renderRuns(runs) {
   const body = $("runs");
-  if (!runs.length) {
+  // 마지막 실행 1건 + 변화가 있었던 실행(신규·갱신·이미지·오류)만 보인다
+  const notable = runs.filter((r, i) => i === 0 || r.error || r.new_count || r.updated_count || r.image_count);
+  const shown = notable.slice(0, 8);
+  if (!shown.length) {
     const tr = el("tr");
     const td = el("td", "empty", "실행 이력이 없습니다");
-    td.colSpan = 6;
+    td.colSpan = 7;
     tr.append(td);
     body.replaceChildren(tr);
     return;
   }
-  body.replaceChildren(...runs.map((run) => {
+  body.replaceChildren(...shown.map((run) => {
     const tr = el("tr");
     tr.append(el("td", "num", fmtTime(run.started_at)));
+    tr.append(el("td", null, MODE_LABEL[run.mode] || run.mode || "—"));
     tr.append(el("td", "num", run.duration_sec === null ? "실행 중" : run.duration_sec));
     tr.append(el("td", "num", run.new_count ?? "—"));
     tr.append(el("td", "num", run.updated_count ?? "—"));
@@ -369,6 +382,13 @@ function renderRuns(runs) {
     tr.append(run.error ? el("td", null, run.error) : el("td", "dim", "—"));
     return tr;
   }));
+  if (notable.length === 1 && runs.length > 1) {
+    const tr = el("tr");
+    const td = el("td", "empty", `최근 ${runs.length}회 중 나머지는 변화 없음`);
+    td.colSpan = 7;
+    tr.append(td);
+    body.append(tr);
+  }
 }
 
 function section(title, ...nodes) {
@@ -390,7 +410,7 @@ function summaryNodes(summary) {
   const t = summary.target;
   if (t) {
     const box = el("div");
-    box.append(targetTags(t.types));
+    box.append(targetTags(t.types, true));
     if (t.text) box.append(el("div", "kv", t.text));
     if (t.conditions && t.conditions.length) box.append(bullets(t.conditions));
     if (t.exclusions && t.exclusions.length) box.append(bullets(t.exclusions, "caveat"));
@@ -400,7 +420,7 @@ function summaryNodes(summary) {
   const c = summary.criteria;
   if (c) {
     const box = el("div");
-    box.append(el("div", "kv", c.text));
+    if (c.text) box.append(el("div", "kv", c.text));
     const chips = el("div");
     (c.products || []).forEach((name) => chips.append(el("span", "tag", name)));
     if (chips.childNodes.length) box.append(chips);
@@ -415,9 +435,10 @@ function renderDetail(event) {
   const head = el("div", "head");
   const left = el("div");
   left.append(el("h3", null, event.title));
-  left.append(el("div", "sub", `${event.period_start || "—"} ~ ${event.period_end || "—"} · 템플릿 ${event.template || "—"} · No.${event.num}`));
+  const stateLabel = event.state === "ended" ? "종료" : "진행중";
+  left.append(el("div", "sub", `${event.period_start || "—"} ~ ${event.period_end || "—"} · ${stateLabel} · No.${event.num}`));
   const tags = el("div", "sub");
-  tags.append(targetTags(event.summary && event.summary.target ? event.summary.target.types : null));
+  tags.append(targetTags(event.summary && event.summary.target ? event.summary.target.types : null, !!event.summary));
   left.append(tags);
 
   const close = el("button", null, "닫기");
@@ -426,28 +447,28 @@ function renderDetail(event) {
   panel.replaceChildren(head);
 
   if (event.list_summary) panel.append(section("목록 요약", el("div", "kv", event.list_summary)));
-  if (event.actions && event.actions.length) panel.append(section("버튼", bullets(event.actions)));
 
   if (event.summary) {
     panel.append(...summaryNodes(event.summary));
   } else {
-    panel.append(section("요약", el("div", "dim", "요약 전")));
+    panel.append(section("요약", el("div", "dim", "요약 전 — 에이전트에게 이벤트를 물으면 채워집니다")));
   }
 
   const image = event.image;
   if (!image) {
-    panel.append(section("이미지", el("div", "dim", "배너 이미지가 없습니다")));
+    panel.append(section("배너", el("div", "dim", "배너 이미지가 없습니다")));
     return;
   }
-
-  const meta = el("div");
-  meta.append(statusBadge(image.status));
-  const link = el("a", null, "배너 이미지 열기");
-  link.href = image.image_url;
-  link.target = "_blank";
-  link.rel = "noopener";
-  meta.append(el("span", null, " · "), link);
-  panel.append(section("배너", meta));
+  const details = el("details");
+  details.append(el("summary", null, "배너 보기"));
+  const box = el("div", "banner");
+  const img = el("img");
+  img.loading = "lazy";
+  img.alt = event.title;
+  details.ontoggle = () => { if (details.open && !img.src) img.src = image.image_url; };
+  box.append(img);
+  details.append(box);
+  panel.append(section("배너", details));
 }
 
 async function selectEvent(num) {
@@ -480,13 +501,11 @@ function buildFilters() {
   };
   bind($("f-target"), TARGETS, "target");
   bind($("f-state"), EVENT_STATES, "eventState", loadEvents);
-  bind($("f-status"), ANALYSIS, "analysis");
 }
 
-function updateButtons() {
+function updateButton() {
   const running = state.crawl && state.crawl.state === "running";
-  const locked = Date.now() < state.lockUntil;
-  ["scrape-live", "scrape-backfill"].forEach((id) => { $(id).disabled = !!(running || locked); });
+  $("scrape-backfill").disabled = !!(running || Date.now() < state.lockUntil);
 }
 
 function renderCrawl(crawl) {
@@ -494,28 +513,19 @@ function renderCrawl(crawl) {
   const pill = $("crawl-pill");
   if (crawl.state === "running") {
     const mode = MODE_LABEL[crawl.mode] || crawl.mode || "";
-    pill.textContent = `${mode} 실행 중 · ${crawl.page}페이지 · ${crawl.events_seen}건`;
+    pill.textContent = `${mode} 수집 중 · ${crawl.page}페이지 · ${crawl.events_seen}건`;
     pill.classList.add("live");
   } else {
-    const mode = MODE_LABEL[crawl.last_mode] || crawl.last_mode;
-    pill.textContent = mode
-      ? `대기 · 마지막 ${mode} ${fmtTime(crawl.last_finished_at)}`
-      : "대기";
+    pill.textContent = "대기";
     pill.classList.remove("live");
   }
-  $("crawl-err").textContent = crawl.last_error || "";
-  updateButtons();
+  updateButton();
 }
 
-async function pollCrawl() {
-  try {
-    const wasRunning = state.crawl && state.crawl.state === "running";
-    const crawl = await getJSON("/api/crawl/status");
-    renderCrawl(crawl);
-    if (wasRunning && crawl.state === "idle") await refresh();
-  } catch (err) {
-    setState(`상태 조회 실패: ${err.message}`, true);
-  }
+function schedule() {
+  clearTimeout(state.timer);
+  const running = state.crawl && state.crawl.state === "running";
+  state.timer = setTimeout(refresh, running ? POLL_RUNNING_MS : POLL_IDLE_MS);
 }
 
 async function loadEvents() {
@@ -526,44 +536,37 @@ async function loadEvents() {
 
 async function refresh() {
   try {
-    const [stats, runs] = await Promise.all([
-      getJSON("/api/stats"), getJSON("/api/runs?limit=20"),
-    ]);
-    renderStats(stats);
+    const [stats, runs] = await Promise.all([getJSON("/api/stats"), getJSON("/api/runs?limit=20")]);
+    renderStats(stats, runs);
     renderCrawl(stats.crawl);
     await loadEvents();
     renderRuns(runs);
-    setState(`갱신 ${fmtTime(new Date().toISOString())}`);
+    setState("");
   } catch (err) {
-    setState(`불러오기 실패: ${err.message}`, true);
+    setAlert(`서버 응답 없음 — ${err.message}`);
+    setState("");
   }
+  schedule();
 }
 
-async function scrapeNow(mode) {
-  const now = Date.now();
-  if (now - state.lastClick < 1000 || now < state.lockUntil) return;
-  state.lastClick = now;
-
+async function backfill() {
+  if (Date.now() < state.lockUntil) return;
   try {
-    const res = await fetch(`/api/scrape?mode=${mode}`, { method: "POST" });
+    const res = await fetch("/api/scrape?mode=backfill", { method: "POST" });
     const body = await res.json();
-
     if (res.status === 202) {
-      renderCrawl({ ...(state.crawl || {}), state: "running", mode, page: 0, events_seen: 0, last_error: null });
-      setState(`${MODE_LABEL[mode] || mode} 시작`);
+      renderCrawl({ ...(state.crawl || {}), state: "running", mode: "backfill", page: 0, events_seen: 0 });
+      setState("백필 시작");
+      schedule();
       return;
     }
-    if (res.status === 409) {
-      setState("이미 실행 중입니다", true);
-      await pollCrawl();
-      return;
-    }
+    if (res.status === 409) { setState("이미 수집 중입니다", true); return; }
     if (res.status === 429) {
       const secs = body.retry_after_sec || 60;
       state.lockUntil = Date.now() + secs * 1000;
-      setState(`너무 잦습니다 · ${secs}초 뒤 다시 시도하세요`, true);
-      updateButtons();
-      setTimeout(updateButtons, secs * 1000);
+      setState(`${secs}초 뒤 다시 시도하세요`, true);
+      updateButton();
+      setTimeout(updateButton, secs * 1000);
       return;
     }
     throw new Error(body.error || res.status);
@@ -573,11 +576,8 @@ async function scrapeNow(mode) {
 }
 
 buildFilters();
-$("scrape-live").onclick = () => scrapeNow("live");
-$("scrape-backfill").onclick = () => scrapeNow("backfill");
+$("scrape-backfill").onclick = backfill;
 refresh();
-setInterval(pollCrawl, 2000);
-setInterval(refresh, 60000);
 </script>
 </body>
 </html>

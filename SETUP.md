@@ -2,7 +2,7 @@
 
 이 문서는 사용자가 "이 레포를 클론했어. MCP 서버 쓸 수 있게 셋팅해줘"라고 했을 때 AI 에이전트(Claude Code 또는 Claude Desktop)가 그대로 따라 하는 절차다. 사용자는 개발자가 아니므로 명령 실행·설정 파일 편집·검증을 전부 에이전트가 한다. 기본 환경은 Windows 10/11이며, macOS는 마지막 절에 차이만 적었다.
 
-완료 기준: (1) 서버가 로그온 때마다 자동으로 떠서 `http://127.0.0.1:4000`에 대시보드가 열리고, (2) Claude Code와 Claude Desktop 양쪽에서 `kis-event` MCP 서버의 tool 10개가 보이며, (3) "지금 뱅키스 이벤트 뭐 있어?"에 답이 나온다.
+완료 기준: (1) 서버가 로그온 때마다 자동으로 떠서 `http://127.0.0.1:4000`에 대시보드가 열리고, (2) Claude Code와 Claude Desktop 양쪽에서 `kis-event` MCP 서버의 tool 7개가 보이며, (3) "지금 뱅키스 이벤트 뭐 있어?"에 답이 나온다.
 
 ## 0. 확인할 것
 - 레포 경로를 절대경로로 잡는다. 아래에서 `<REPO>`는 예: `C:\Users\me\project-kisevent`.
@@ -44,11 +44,11 @@ curl http://127.0.0.1:4000/api/health
 ```powershell
 claude mcp add --transport http --scope user kis-event http://127.0.0.1:4000/mcp
 ```
-확인: Claude Code에서 `/mcp` → `kis-event` 연결됨, tool 10개.
+확인: Claude Code에서 `/mcp` → `kis-event` 연결됨, tool 7개.
 서버 이름은 반드시 `kis-event`여야 한다. `.claude/agents/banner-summarizer.md`(배너 요약 서브에이전트)가 `mcp__kis-event__get_summary_tiles`·`mcp__kis-event__save_summary` 이름으로 도구를 찾기 때문이다.
 
 ## 5. Claude Desktop 연결
-Claude Desktop은 localhost HTTP 커넥터를 받지 않을 수 있으므로 stdio로 등록한다. stdio 진입점은 서버 없이 같은 DB를 읽으므로 3단계 서버가 꺼져 있어도 조회는 된다(수집은 서버가 한다).
+Claude Desktop은 localhost HTTP 커넥터를 받지 않을 수 있으므로 stdio로 등록한다. stdio 진입점은 서버 없이 같은 DB를 읽으므로 3단계 서버가 꺼져 있어도 조회는 된다(수집과 `sync_now`는 서버가 한다).
 설정 파일 `%APPDATA%\Claude\claude_desktop_config.json`에 다음을 넣는다(파일이 없으면 만들고, 있으면 `mcpServers` 안에 항목만 추가). 경로의 `\`는 JSON이므로 `\\`로 쓴다.
 ```json
 {

@@ -44,6 +44,7 @@ def stats() -> dict:
         return {
             "events_active": events_active,
             "events_ended": events_ended,
+            "pending_ongoing": queries.list_events(conn, None, "ongoing")["pending_summaries"],
             "by_target": queries.by_target(conn),
             "images": images,
             "new_last_24h": queries.new_events_since(conn, 24),

@@ -12,7 +12,9 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ContentBlock, ImageContent, TextContent
 from pydantic import ValidationError
 
-from backend.core import db, queries, tiles
+import httpx
+
+from backend.core import crawl, db, queries, tiles
 from backend.mcp.schema import SUMMARY_GUIDE, SUMMARY_SCHEMA_VERSION, SummaryV2
 
 INSTRUCTIONS = (
@@ -20,10 +22,16 @@ INSTRUCTIONS = (
     " 배너가 요약돼 있어야 한다. 흐름: list_events 또는 events_on으로 대상 이벤트를 고른다 → 미요약이 있으면"
     " list_pending_summaries로 image_id를 받는다 → Claude Code처럼 서브에이전트를 쓸 수 있으면 image_id마다"
     " banner-summarizer를 병렬로 띄우고, 아니면 get_summary_tiles → save_summary를 직접 순서대로 한다 →"
-    " 다시 조회해 답한다."
+    " 다시 조회해 답한다. 수집은 15분마다 자동이며, 사용자가 '지금'·'최신' 기준을 요구할 때만 sync_now를"
+    " 먼저 부르고 몇 초 뒤 조회한다."
 )
 
 mcp = MCPServer("kis-event", instructions=INSTRUCTIONS)
+
+# stdio(Claude Desktop)는 서버와 다른 프로세스라 실행 게이트를 공유하지 못한다. 그 경우 sync_now는
+# 서버 REST에 위임한다(backend.mcp.stdio가 True로 바꾼다).
+SYNC_VIA_HTTP = False
+SERVER_URL = "http://127.0.0.1:4000"
 
 CLAIM_TIMEOUT_MIN = 30
 SUMMARY_QUALITY = 75
@@ -86,6 +94,33 @@ def _now() -> str:
 
 def _claim_cutoff() -> str:
     return (datetime.now(timezone.utc) - timedelta(minutes=CLAIM_TIMEOUT_MIN)).isoformat()
+
+
+@mcp.tool()
+@_logged
+def sync_now() -> dict:
+    """진행중 이벤트 목록을 지금 다시 수집한다(live 동기화, 5초 안팎). 수집은 15분마다 자동으로 돌므로 사용자가 '지금'·'최신' 기준을 요구할 때만 부른다. 백그라운드로 시작되고 바로 돌아오니, started가 true면 5~10초 뒤 list_events/events_on을 다시 호출한다(fetched_at으로 확인). already_running이면 기다렸다 조회하고, retry_after_sec이 있으면 그만큼 지나기 전엔 다시 부르지 않는다(직전 수집이 1분 이내라 이미 최신이다). 지난 이벤트 백필은 대시보드에서만 한다."""
+    if SYNC_VIA_HTTP:
+        try:
+            res = httpx.post(f"{SERVER_URL}/api/scrape", params={"mode": "live"}, timeout=10.0)
+        except httpx.HTTPError:
+            return {"started": False, "error": f"서버({SERVER_URL})가 꺼져 있습니다. run.bat으로 띄운 뒤 다시 시도하세요."}
+        body = res.json()
+        if res.status_code == 202:
+            return {"started": True}
+        if res.status_code == 409:
+            return {"started": False, "already_running": True}
+        if res.status_code == 429:
+            return {"started": False, "retry_after_sec": body.get("retry_after_sec")}
+        return {"started": False, "error": body.get("error", str(res.status_code))}
+
+    try:
+        crawl.start_background("live", "mcp")
+    except crawl.AlreadyRunning:
+        return {"started": False, "already_running": True}
+    except crawl.Debounced as exc:
+        return {"started": False, "retry_after_sec": exc.retry_after_sec}
+    return {"started": True}
 
 
 @mcp.tool()

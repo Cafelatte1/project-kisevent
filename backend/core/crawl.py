@@ -74,7 +74,8 @@ def _begin(mode: str, trigger: str) -> None:
         raise AlreadyRunning()
 
     try:
-        if trigger == "manual" and _last_started_at is not None:
+        # 스케줄러만 debounce를 건너뛴다(대시보드 manual·MCP mcp 모두 적용)
+        if trigger != "scheduler" and _last_started_at is not None:
             elapsed = time.monotonic() - _last_started_at
             if elapsed < DEBOUNCE_SEC:
                 retry_after = max(1, math.ceil(DEBOUNCE_SEC - elapsed))
