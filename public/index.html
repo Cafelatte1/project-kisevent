@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>한국투자증권 이벤트 스냅샷</title>
+<style>
+	* { box-sizing: border-box; }
+	body {
+		margin: 0;
+		padding: 24px;
+		background: #f4f5f7;
+		color: #1b1d21;
+		font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+	}
+	h1 { font-size: 20px; margin: 0 0 16px; }
+	.toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+	button {
+		font: inherit;
+		border: 1px solid #c9ccd2;
+		background: #fff;
+		border-radius: 6px;
+		padding: 8px 14px;
+		cursor: pointer;
+	}
+	button:disabled { opacity: 0.5; cursor: default; }
+	#fetchBtn { background: #0b57d0; border-color: #0b57d0; color: #fff; }
+	.filters { display: flex; gap: 6px; }
+	.filters button.active { background: #1b1d21; border-color: #1b1d21; color: #fff; }
+	.meta { color: #5c6069; font-size: 13px; }
+	.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+	.card {
+		background: #fff;
+		border: 1px solid #e3e5e9;
+		border-radius: 10px;
+		padding: 16px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.card h2 { font-size: 16px; margin: 0; }
+	.badge {
+		display: inline-block;
+		font-size: 12px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: #e8eaee;
+		color: #3c4048;
+	}
+	.badge.ing { background: #e4f1e5; color: #1d6b2a; }
+	.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+	.chip { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #eef3fd; color: #0b57d0; }
+	.period, .dept { font-size: 13px; color: #5c6069; }
+	.summary { font-size: 14px; margin: 0; }
+	.detail {
+		font-size: 13px;
+		color: #3c4048;
+		white-space: pre-wrap;
+		max-height: 220px;
+		overflow: auto;
+		border-top: 1px solid #eceef1;
+		padding-top: 8px;
+	}
+	.detail img { width: 100%; display: block; }
+	.empty { color: #5c6069; }
+</style>
+</head>
+<body>
+	<h1>한국투자증권 진행중인 이벤트</h1>
+
+	<div class="toolbar">
+		<button id="fetchBtn">가져오기</button>
+		<div class="filters">
+			<button class="filter active" data-target="전체">전체</button>
+			<button class="filter" data-target="영업점">영업점</button>
+			<button class="filter" data-target="뱅키스">뱅키스</button>
+		</div>
+		<span class="meta" id="meta"></span>
+	</div>
+
+	<div class="cards" id="cards"></div>
+	<p class="empty" id="empty">가져오기 버튼을 눌러 이벤트를 불러오세요.</p>
+
+<script>
+	var state = { events: [], fetchedAt: null, filter: '전체' };
+
+	var fetchBtn = document.getElementById('fetchBtn');
+	var cardsEl = document.getElementById('cards');
+	var metaEl = document.getElementById('meta');
+	var emptyEl = document.getElementById('empty');
+
+	fetchBtn.addEventListener('click', load);
+
+	document.querySelectorAll('.filter').forEach(function (btn) {
+		btn.addEventListener('click', function () {
+			document.querySelectorAll('.filter').forEach(function (b) { b.classList.remove('active'); });
+			btn.classList.add('active');
+			state.filter = btn.dataset.target;
+			render();
+		});
+	});
+
+	async function load() {
+		fetchBtn.disabled = true;
+		fetchBtn.textContent = '가져오는 중...';
+		emptyEl.textContent = '스크래핑 중입니다. 잠시만 기다려 주세요.';
+		cardsEl.innerHTML = '';
+		try {
+			var res = await fetch('/api/events');
+			if (!res.ok) throw new Error('요청 실패 (' + res.status + ')');
+			var data = await res.json();
+			state.events = data.events || [];
+			state.fetchedAt = data.fetchedAt;
+			render();
+		} catch (err) {
+			emptyEl.textContent = '불러오기 실패: ' + err.message;
+		} finally {
+			fetchBtn.disabled = false;
+			fetchBtn.textContent = '가져오기';
+		}
+	}
+
+	function render() {
+		metaEl.textContent = state.fetchedAt ? '가져온 시각: ' + new Date(state.fetchedAt).toLocaleString('ko-KR') : '';
+
+		var list = state.events.filter(function (e) {
+			return state.filter === '전체' || (e.targets || []).indexOf(state.filter) !== -1;
+		});
+
+		cardsEl.innerHTML = '';
+		if (!list.length) {
+			emptyEl.textContent = state.events.length ? '해당 대상의 이벤트가 없습니다.' : '가져온 이벤트가 없습니다.';
+			return;
+		}
+		emptyEl.textContent = '';
+		list.forEach(function (event) { cardsEl.appendChild(card(event)); });
+	}
+
+	function card(event) {
+		var el = document.createElement('div');
+		el.className = 'card';
+
+		var title = document.createElement('h2');
+		title.textContent = event.title;
+		el.appendChild(title);
+
+		if (event.status) {
+			var badge = document.createElement('span');
+			badge.className = 'badge' + (event.status === '진행중' ? ' ing' : '');
+			badge.textContent = event.status;
+			el.appendChild(badge);
+		}
+
+		var period = document.createElement('div');
+		period.className = 'period';
+		period.textContent = (event.periodStart || '?') + ' ~ ' + (event.periodEnd || '?');
+		el.appendChild(period);
+
+		var chips = document.createElement('div');
+		chips.className = 'chips';
+		(event.targets || []).forEach(function (target) {
+			var chip = document.createElement('span');
+			chip.className = 'chip';
+			chip.textContent = target;
+			chips.appendChild(chip);
+		});
+		el.appendChild(chips);
+
+		if (event.summary) {
+			var summary = document.createElement('p');
+			summary.className = 'summary';
+			summary.textContent = event.summary;
+			el.appendChild(summary);
+		}
+
+		if (event.department) {
+			var dept = document.createElement('div');
+			dept.className = 'dept';
+			dept.textContent = '담당부서: ' + event.department;
+			el.appendChild(dept);
+		}
+
+		if (event.detail && (event.detail.text || event.detail.imagePath)) {
+			var detail = document.createElement('div');
+			detail.className = 'detail';
+			if (event.detail.text) detail.textContent = event.detail.text;
+			if (event.detail.imagePath) {
+				var img = document.createElement('img');
+				img.src = event.detail.imagePath;
+				img.alt = event.title;
+				detail.appendChild(img);
+			}
+			el.appendChild(detail);
+		}
+
+		return el;
+	}
+</script>
+</body>
+</html>
