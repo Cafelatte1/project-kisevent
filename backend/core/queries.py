@@ -1,7 +1,7 @@
 """MCP tool과 REST가 함께 쓰는 조회 함수."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 PENDING_SUMMARY_SQL = (
@@ -78,7 +78,9 @@ def list_events(conn, target: str | None = None, state: str = "ongoing") -> dict
 
 
 def events_on(conn, date_str: str, target: str | None = None) -> list[dict]:
-    """그 날짜에 신청 기간이 걸려 있던 이벤트(종료 포함). 목록 날짜는 YYYY.MM.DD라 변환해 비교한다."""
+    """그 날짜에 신청 기간이 걸려 있던 이벤트(종료 포함). 목록 날짜는 YYYY.MM.DD라 변환해 비교한다.
+    date_str는 YYYY-MM-DD(구분자 . / 허용). 형식이 다르면 ValueError."""
+    date_str = date.fromisoformat(date_str.strip().replace(".", "-").replace("/", "-")).isoformat()
     rows = conn.execute(
         "SELECT * FROM events WHERE replace(period_start, '.', '-') <= ?"
         " AND replace(period_end, '.', '-') >= ?"

@@ -1,6 +1,5 @@
 """네트워크 없이 파싱·순회 함수만 검증한다. HTML은 docs/event-page-research.md 발췌."""
 
-from datetime import date
 
 from backend.core.scraper import collect_pages, parse_detail, parse_list
 
@@ -32,7 +31,7 @@ DETAIL_C = """
   <form name="eventForm">
     <input name="event_num" type="hidden" value="6767" />
     <div class="mWrap"><div class="events_1">
-      <img alt="BanKIS 국내주식 자산증대 이벤트" src="/inc/img/event/20260901_domestic_asset_promotion_event_h.png" usemap="#Map" />
+      <img alt="BanKIS 국내주식 자산증대 이벤트" src="/inc/img/event/20260901_domestic_asset_promotion_event_h.png " usemap="#Map" />
     </div></div>
   </form>
 </div>
@@ -140,20 +139,17 @@ def test_collect_pages_stops_at_empty_page():
     assert calls == [1, 2, 3]
 
 
-def test_collect_pages_stop_before_uses_page_max():
-    # 3페이지는 최소가 경계 밖이지만 최대가 경계 안이므로 계속 읽고,
-    # 4페이지는 최대가 경계 밖이라 그 페이지까지 포함하고 멈춘다.
+def test_collect_pages_limit_stops_after_page_that_reaches_it():
+    # 누적 3건 이상이 되는 2페이지까지 읽고(페이지는 자르지 않음) 3페이지는 열지 않는다.
     fetch_page, calls = _pages(
         ["2026.09.30", "2026.09.01"],
         ["2026.08.20", "2026.08.01"],
-        ["2025.10.05", "2025.07.31"],
-        ["2025.08.20", "2025.08.01"],
-        ["2025.06.30"],
+        ["2025.10.05"],
     )
-    events, pages = collect_pages(fetch_page, stop_before=date(2025, 9, 17))
-    assert pages == 4
-    assert len(events) == 8
-    assert calls == [1, 2, 3, 4]
+    events, pages = collect_pages(fetch_page, limit=3)
+    assert pages == 2
+    assert len(events) == 4
+    assert calls == [1, 2]
 
 
 def test_collect_pages_reports_each_page():

@@ -106,6 +106,8 @@ def events_on(date: str, target: str | None = None) -> dict:
     conn = db.connect()
     try:
         events = queries.events_on(conn, date, target)
+    except ValueError:
+        return {"error": f"date는 YYYY-MM-DD 형식이어야 합니다: {date!r}"}
     finally:
         conn.close()
 

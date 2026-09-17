@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 SUMMARY_SCHEMA_VERSION = 2
 
@@ -29,13 +29,28 @@ class TargetV2(BaseModel):
     conditions: list[str] = []
     exclusions: list[str] = []
 
+    # 에이전트가 빈 값을 null로 쓰는 경우가 잦아 기본값으로 받는다.
+    @field_validator("types", "text", "conditions", "exclusions", mode="before")
+    @classmethod
+    def _null_to_default(cls, v, info):
+        return cls.model_fields[info.field_name].default if v is None else v
+
 
 class CriteriaV2(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    text: str
+    text: str = ""
     products: list[Product] = []
     performance: str | None = None
+
+    @field_validator("text", "products", mode="before")
+    @classmethod
+    def _null_to_default(cls, v, info):
+        return cls.model_fields[info.field_name].default if v is None else v
+
+    @property
+    def empty(self) -> bool:
+        return not (self.text.strip() or self.products or self.performance)
 
 
 class SummaryV2(BaseModel):
@@ -50,6 +65,9 @@ class SummaryV2(BaseModel):
     def _block_requires_target(self) -> "SummaryV2":
         if self.block_found and not self.target.text.strip():
             raise ValueError("block_found가 true면 target.text가 필요합니다")
+        # 세 필드가 다 비면 기준 없음으로 본다.
+        if self.criteria is not None and self.criteria.empty:
+            self.criteria = None
         return self
 
 

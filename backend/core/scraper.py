@@ -5,7 +5,7 @@ import json
 import os
 import re
 from collections.abc import Callable
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from urllib.parse import urljoin, urlparse
 
@@ -21,7 +21,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 TABS = {"00": "전체"}
 # 진행중 탭(i)과 지난 이벤트 탭(t)
 LIST_TAB = {"live": "i", "backfill": "t"}
-BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "365"))  # 0이면 지난 이벤트 탭 전체
+BACKFILL_LIMIT = int(os.environ.get("BACKFILL_LIMIT", "100"))  # 지난 이벤트 보관 건수. 0이면 전체
 MAX_PAGES = 20
 
 Image.MAX_IMAGE_PIXELS = None
@@ -62,28 +62,19 @@ def parse_list(html: str) -> list[dict]:
                 "summary": _clean(summary_el.get_text()) if summary_el else None,
                 "period_start": start.strip() or None,
                 "period_end": end.strip() or None,
-                "thumbnail_url": urljoin(BASE_URL, img_el["src"]) if img_el and img_el.get("src") else None,
+                "thumbnail_url": urljoin(BASE_URL, img_el["src"].strip()) if img_el and img_el.get("src") else None,
             }
         )
 
     return events
 
 
-def _period_end(item: dict) -> date | None:
-    value = (item.get("period_end") or "").strip()
-    try:
-        return datetime.strptime(value, "%Y.%m.%d").date()
-    except ValueError:
-        return None
-
-
 def collect_pages(
     fetch_page: Callable[[int], list[dict]],
-    stop_before: date | None = None,
+    limit: int | None = None,
     on_page: Callable[[int, list[dict]], None] | None = None,
 ) -> tuple[list[dict], int]:
-    """빈 페이지까지 순회한다. 정렬이 엄격하지 않으므로 한 페이지의 '최대' 종료일이
-    stop_before보다 이전일 때만 그 페이지까지 포함하고 멈춘다."""
+    """빈 페이지까지 순회한다. limit이 있으면 누적 건수가 limit에 닿은 페이지까지 읽고 멈춘다(페이지는 자르지 않는다)."""
     events: list[dict] = []
     pages = 0
 
@@ -97,10 +88,8 @@ def collect_pages(
         if on_page is not None:
             on_page(page, items)
 
-        if stop_before is not None:
-            ends = [end for end in (_period_end(item) for item in items) if end is not None]
-            if ends and max(ends) < stop_before:
-                break
+        if limit is not None and len(events) >= limit:
+            break
 
     return events, pages
 
@@ -109,7 +98,7 @@ def fetch_list_all(
     client: httpx.Client,
     code: str,
     gubun: str,
-    stop_before: date | None = None,
+    limit: int | None = None,
     on_page: Callable[[str, int, list[dict]], None] | None = None,
 ) -> tuple[list[dict], int]:
     def fetch_page(page: int) -> list[dict]:
@@ -121,7 +110,7 @@ def fetch_list_all(
         return parse_list(response.text)
 
     report = None if on_page is None else (lambda page, items: on_page(code, page, items))
-    return collect_pages(fetch_page, stop_before, report)
+    return collect_pages(fetch_page, limit, report)
 
 
 def detail_url(num: str, code: str, gubun: str) -> str:
@@ -147,7 +136,7 @@ def parse_detail(html: str) -> dict:
         template = "D"
 
     img = container.select_one(".events_1 img") or container.select_one("img")
-    image_url = urljoin(BASE_URL, img["src"]) if img is not None and img.get("src") else None
+    image_url = urljoin(BASE_URL, img["src"].strip()) if img is not None and img.get("src") else None
 
     title_el = container.select_one("title")
     if title_el is not None and _clean(title_el.get_text()):
@@ -240,11 +229,14 @@ def _upsert_event(conn, event: dict, now: str) -> str:
     return "updated" if changed else "same"
 
 
-def _mark_ended(conn, seen: set[str]) -> None:
+def _mark_ended(conn, seen: set[str]) -> int:
     sql = "UPDATE events SET state = 'ended' WHERE state = 'ongoing'"
     if seen:
         sql += f" AND num NOT IN ({','.join('?' * len(seen))})"
-    conn.execute(sql, tuple(seen))
+    ended = conn.execute(sql, tuple(seen)).rowcount
+    if ended:
+        logger.bind(ctx="live").info("events ended n={}", ended)
+    return ended
 
 
 def _backfill_event(conn, event: dict, now: str) -> str:
@@ -330,9 +322,7 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
     failed: list[str] = []
 
     gubun = LIST_TAB[mode]
-    stop_before = (
-        date.today() - timedelta(days=BACKFILL_DAYS) if mode == "backfill" and BACKFILL_DAYS > 0 else None
-    )
+    limit = BACKFILL_LIMIT if mode == "backfill" and BACKFILL_LIMIT > 0 else None
 
     try:
         with httpx.Client(headers=HEADERS, timeout=30.0, follow_redirects=True) as client:
@@ -347,7 +337,7 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
 
             lists = {}
             for code in TABS:
-                lists[code], read = fetch_list_all(client, code, gubun, stop_before, report)
+                lists[code], read = fetch_list_all(client, code, gubun, limit, report)
                 pages += read
             merged = _merge_lists(lists)
 
@@ -365,7 +355,7 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
                     updated_count += 1
                     log.debug("event updated num={}", event["num"])
             if mode == "live":
-                _mark_ended(conn, {event["num"] for event in merged})
+                updated_count += _mark_ended(conn, {event["num"] for event in merged})
             conn.commit()
 
             for event in merged:

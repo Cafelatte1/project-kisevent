@@ -126,3 +126,12 @@ def test_events_on_tool_returns_dict_with_notice_and_pending(conn):
 
 def test_by_target_counts_unsummarized_as_unknown(conn):
     assert queries.by_target(conn) == {"영업점": 0, "뱅키스": 1, "연금": 0, "미상": 1}
+
+
+def test_events_on_accepts_dot_and_slash_dates_and_rejects_garbage(conn):
+    import pytest
+
+    assert queries.events_on(conn, "2026.09.17") == queries.events_on(conn, "2026-09-17")
+    assert queries.events_on(conn, "2026/09/17") == queries.events_on(conn, "2026-09-17")
+    with pytest.raises(ValueError):
+        queries.events_on(conn, "9월 17일")

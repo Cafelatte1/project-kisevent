@@ -166,7 +166,7 @@ a { color: var(--branch); }
       <span class="state err" id="crawl-err"></span>
       <span class="state" id="state"></span>
       <button id="scrape-live">지금 동기화</button>
-      <button id="scrape-backfill">1년 백필</button>
+      <button id="scrape-backfill">과거 100건 백필</button>
     </div>
   </header>
 
@@ -280,7 +280,7 @@ function renderStats(stats) {
   const main = $("tiles-main");
   main.replaceChildren(
     tile("진행 중 이벤트", stats.events_active, true),
-    tile("종료 이벤트(1년)", stats.events_ended ?? 0),
+    tile("종료 이벤트(최근 100건)", stats.events_ended ?? 0),
     tile("영업점", stats.by_target["영업점"]),
     tile("뱅키스", stats.by_target["뱅키스"]),
     tile("24시간 신규", stats.new_last_24h),

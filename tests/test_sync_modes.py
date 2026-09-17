@@ -52,7 +52,7 @@ def run(tmp_path, monkeypatch):
     def do(mode: str, items: list[dict]) -> dict:
         by_code = {"00": items}
 
-        def fake_fetch(client, code, gubun, stop_before=None, on_page=None):
+        def fake_fetch(client, code, gubun, limit=None, on_page=None):
             seen_gubun.append(gubun)
             return by_code.get(code, []), 1
 
@@ -76,6 +76,7 @@ def test_live_ends_events_that_disappeared(run):
 
     result = run("live", [_item("1")])
     assert result["mode"] == "live"
+    assert result["updated"] == 1  # 사라진 이벤트의 ended 전환도 갱신으로 집계
     conn = db.connect()
     assert _states(conn) == {"1": "ongoing", "2": "ended"}
     conn.close()

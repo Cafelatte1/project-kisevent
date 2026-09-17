@@ -57,3 +57,26 @@ def test_target_type_vocabulary():
 
     with pytest.raises(ValidationError):
         SummaryV2.model_validate(payload)
+
+
+def test_null_fields_coerced_to_defaults():
+    s = SummaryV2.model_validate(
+        {"analysis": "a", "target": {"types": None, "text": "영업점 고객", "conditions": None, "exclusions": None},
+         "criteria": {"text": "국내주식 거래", "products": None}, "block_found": True}
+    )
+    assert s.target.types == [] and s.target.conditions == [] and s.criteria.products == []
+
+
+def test_criteria_with_null_text_keeps_other_fields():
+    s = SummaryV2.model_validate(
+        {"analysis": "a", "target": {"text": "뱅키스 고객"},
+         "criteria": {"text": None, "products": [], "performance": "금현물 주문"}, "block_found": True}
+    )
+    assert s.criteria.text == "" and s.criteria.performance == "금현물 주문"
+
+
+def test_all_empty_criteria_becomes_none():
+    s = SummaryV2.model_validate(
+        {"analysis": "a", "target": {"text": "뱅키스 고객"}, "criteria": {"text": None, "products": None}, "block_found": True}
+    )
+    assert s.criteria is None

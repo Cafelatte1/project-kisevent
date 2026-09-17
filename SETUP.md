@@ -34,7 +34,7 @@ schtasks /Run /TN "KISEvent"
 ```powershell
 curl http://127.0.0.1:4000/api/health
 ```
-`{"ok":true,...}`가 나와야 한다. 첫 기동은 진행중 이벤트 수집 후 지난 이벤트 1년치 백필(약 200건, 이미지 250MB)을 자동으로 한 번 돈다 — 대시보드 상단 pill에서 진행 상황이 보인다.
+`{"ok":true,...}`가 나와야 한다. 첫 기동은 진행중 이벤트 수집 후 지난 이벤트 최근 100건 백필(이미지 약 250MB)을 자동으로 한 번 돈다 — 대시보드 상단 pill에서 진행 상황이 보인다.
 - 수동으로 띄울 땐 `<REPO>\run.bat`(콘솔 창 있음). 4000 포트를 쓰던 프로세스는 스크립트가 먼저 종료한다.
 - 로그: `%LOCALAPPDATA%\kisevent\logs\app.log` (10MB 롤링, 5개 보관). 문제가 생기면 여기부터 본다.
 - 데이터: `<REPO>\data\events.db`, `<REPO>\data\images\`.
