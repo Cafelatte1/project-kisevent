@@ -13,22 +13,14 @@ from mcp.types import ContentBlock, ImageContent, TextContent
 from pydantic import ValidationError
 
 from backend.core import db, queries, tiles
-from backend.mcp.schema import (
-    SCHEMA_GUIDE,
-    SCHEMA_VERSION,
-    SUMMARY_GUIDE,
-    SUMMARY_SCHEMA_VERSION,
-    AnalysisV1,
-    SummaryV2,
-)
+from backend.mcp.schema import SUMMARY_GUIDE, SUMMARY_SCHEMA_VERSION, SummaryV2
 
 INSTRUCTIONS = (
     "한국투자증권 이벤트 수집·요약 서버. 이벤트 내용은 배너 이미지 안에 있어, 질문에 답하기 전에 관련 이벤트의"
     " 배너가 요약돼 있어야 한다. 흐름: list_events 또는 events_on으로 대상 이벤트를 고른다 → 미요약이 있으면"
     " list_pending_summaries로 image_id를 받는다 → Claude Code처럼 서브에이전트를 쓸 수 있으면 image_id마다"
     " banner-summarizer를 병렬로 띄우고, 아니면 get_summary_tiles → save_summary를 직접 순서대로 한다 →"
-    " 다시 조회해 답한다. 조건·유의사항·금액의 세부가 필요할 때만 get_pending_tiles → save_tile_text →"
-    " get_transcript → save_analysis(전체 전사)를 쓴다."
+    " 다시 조회해 답한다."
 )
 
 mcp = MCPServer("kis-event", instructions=INSTRUCTIONS)
@@ -99,7 +91,7 @@ def _claim_cutoff() -> str:
 @mcp.tool()
 @_logged
 def list_events(target: str | None = None) -> dict:
-    """현재 진행 중인 한국투자증권 이벤트 목록. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 조건·유의사항·혜택 금액처럼 상세한 내용이 필요할 때만 get_pending_tiles → save_tile_text → get_transcript → save_analysis(전체 전사)를 쓴다."""
+    """현재 진행 중인 한국투자증권 이벤트 목록. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접)."""
     conn = db.connect()
     try:
         return queries.list_events(conn, target)
@@ -276,185 +268,8 @@ def save_summary(image_id: int, summary: dict) -> dict:
 
 @mcp.tool()
 @_logged
-def get_pending_tiles(limit: int = 2, image_id: int | None = None) -> list[ContentBlock]:
-    """미분석 배너 이미지의 다음 타일을 최대 limit장 돌려준다(타일당 1120×약2000px, 위에서 아래 순서). 각 타일 앞의 텍스트에 image_id, tile_idx, tile_total, overlap이 있다. 타일을 보고 보이는 글자를 그대로 전사해 save_tile_text로 저장하라. overlap이 150인 타일은 상단 150px가 이전 타일과 겹치므로 중복되는 줄은 빼고 전사한다. 한 이미지의 타일이 모두 저장되면 그 이미지는 transcribed 상태가 되고 get_transcript로 넘어간다. 응답이 '분석할 이미지가 없습니다'면 모든 이미지가 처리된 것이다. image_id를 주면 그 이미지를 이어서 돌려준다."""
-    limit = max(1, min(3, limit))
-    conn = db.connect()
-    try:
-        if image_id is not None:
-            row = conn.execute(
-                "SELECT id FROM event_images WHERE id = ?", (image_id,)
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT i.id FROM event_images i JOIN image_tiles t ON t.image_id = i.id"
-                " WHERE i.status = 'transcribing' AND t.text IS NULL ORDER BY i.id LIMIT 1"
-            ).fetchone()
-        if row is None and image_id is None:
-            row = conn.execute(
-                "SELECT id FROM event_images WHERE status = 'pending' ORDER BY id LIMIT 1"
-            ).fetchone()
-        if row is None:
-            log.debug("no pending images")
-            return [TextContent(type="text", text="분석할 이미지가 없습니다")]
-
-        image_id = row["id"]
-        tiles.ensure_tiles(conn, image_id)
-        conn.execute("UPDATE event_images SET status = 'transcribing' WHERE id = ?", (image_id,))
-        conn.commit()
-
-        image = conn.execute(
-            "SELECT i.local_path, i.tile_count, i.event_num, e.title FROM event_images i"
-            " JOIN events e ON e.num = i.event_num WHERE i.id = ?",
-            (image_id,),
-        ).fetchone()
-
-        contents: list[ContentBlock] = []
-        for tile in conn.execute(
-            "SELECT idx, y0, y1, overlap FROM image_tiles WHERE image_id = ? AND text IS NULL"
-            " ORDER BY idx LIMIT ?",
-            (image_id, limit),
-        ).fetchall():
-            meta = {
-                "image_id": image_id,
-                "event_num": image["event_num"],
-                "event_title": image["title"],
-                "tile_idx": tile["idx"],
-                "tile_total": image["tile_count"],
-                "y0": tile["y0"],
-                "y1": tile["y1"],
-                "overlap": tile["overlap"],
-            }
-            jpeg = tiles.render_tile(image["local_path"], tile["y0"], tile["y1"])
-            contents.append(TextContent(type="text", text=json.dumps(meta, ensure_ascii=False)))
-            contents.append(
-                ImageContent(
-                    type="image", mimeType="image/jpeg", data=base64.b64encode(jpeg).decode()
-                )
-            )
-
-        return contents
-    finally:
-        conn.close()
-
-
-@mcp.tool()
-@_logged
-def save_tile_text(image_id: int, tile_idx: int, text: str) -> dict:
-    """타일 전사 결과 저장. text는 타일에 보이는 글자를 순서대로 옮긴 원문이다(요약·해석 금지, 표는 행마다 셀을 ' | '로 구분). 글자가 전혀 없는 장식 타일은 빈 문자열로 저장한다. 응답의 remaining_tiles가 0이면 get_transcript(image_id)로 넘어가라."""
-    conn = db.connect()
-    try:
-        cursor = conn.execute(
-            "UPDATE image_tiles SET text = ?, transcribed_at = ? WHERE image_id = ? AND idx = ?",
-            (text, _now(), image_id, tile_idx),
-        )
-        if cursor.rowcount == 0:
-            return {"error": f"타일을 찾을 수 없습니다: image_id={image_id}, tile_idx={tile_idx}"}
-
-        remaining = conn.execute(
-            "SELECT COUNT(*) FROM image_tiles WHERE image_id = ? AND text IS NULL", (image_id,)
-        ).fetchone()[0]
-        if remaining == 0:
-            conn.execute("UPDATE event_images SET status = 'transcribed' WHERE id = ?", (image_id,))
-        conn.commit()
-
-        status = conn.execute(
-            "SELECT status FROM event_images WHERE id = ?", (image_id,)
-        ).fetchone()["status"]
-        return {"image_id": image_id, "remaining_tiles": remaining, "status": status}
-    finally:
-        conn.close()
-
-
-@mcp.tool()
-@_logged
-def get_transcript(image_id: int) -> dict:
-    """이미지 전체 전사문과 목록·HTML에서 얻은 메타데이터, 구조화 안내를 돌려준다. 이것을 읽고 schema_version 1 JSON으로 구조화한 뒤 save_analysis로 저장하라."""
-    conn = db.connect()
-    try:
-        row = conn.execute(
-            "SELECT i.event_num, e.title, e.period_start, e.period_end, e.summary,"
-            " e.actions, e.detail_title FROM event_images i JOIN events e ON e.num = i.event_num"
-            " WHERE i.id = ?",
-            (image_id,),
-        ).fetchone()
-        if row is None:
-            log.warning("not found image_id={}", image_id)
-            return {"error": "not found"}
-
-        result = {
-            "image_id": image_id,
-            "event_num": row["event_num"],
-            "title": row["title"],
-            "list_period": {"start": row["period_start"], "end": row["period_end"]},
-            "list_summary": row["summary"],
-            "list_actions": json.loads(row["actions"] or "[]"),
-            "detail_title": row["detail_title"],
-            "transcript": queries.transcript(conn, image_id),
-            "schema_guide": SCHEMA_GUIDE,
-        }
-
-        missing = conn.execute(
-            "SELECT COUNT(*) FROM image_tiles WHERE image_id = ? AND text IS NULL", (image_id,)
-        ).fetchone()[0]
-        if missing:
-            result["warning"] = f"타일 {missing}개가 아직 전사되지 않았습니다"
-
-        return result
-    finally:
-        conn.close()
-
-
-@mcp.tool()
-@_logged
-def save_analysis(image_id: int, analysis: dict, summary: str) -> dict:
-    """구조화 결과 저장. analysis는 schema_version 1 JSON, summary는 대상+핵심 혜택+신청 기간을 담은 200자 이내 한 문장(list_events에 그대로 실린다). 검증에 실패하면 오류 내용을 돌려주니 고쳐서 다시 호출하라."""
-    try:
-        parsed = AnalysisV1.model_validate(analysis)
-    except ValidationError as exc:
-        errors = [
-            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
-            for error in exc.errors()
-        ]
-        log.warning("save_analysis rejected image_id={} errors={}", image_id, errors[:3])
-        return {"ok": False, "errors": errors}
-
-    if len(summary) > 200:
-        errors = [f"summary가 200자를 넘습니다({len(summary)}자)"]
-        log.warning("save_analysis rejected image_id={} errors={}", image_id, errors)
-        return {"ok": False, "errors": errors}
-
-    conn = db.connect()
-    try:
-        row = conn.execute("SELECT event_num FROM event_images WHERE id = ?", (image_id,)).fetchone()
-        if row is None:
-            log.warning("not found image_id={}", image_id)
-            return {"ok": False, "errors": [f"image_id {image_id}를 찾을 수 없습니다"]}
-
-        conn.execute(
-            "INSERT INTO image_analysis (image_id, schema_version, summary, json, analyzed_at)"
-            " VALUES (?, ?, ?, ?, ?) ON CONFLICT(image_id) DO UPDATE SET"
-            " schema_version = excluded.schema_version, summary = excluded.summary,"
-            " json = excluded.json, analyzed_at = excluded.analyzed_at",
-            (image_id, SCHEMA_VERSION, summary, parsed.model_dump_json(), _now()),
-        )
-        conn.execute("UPDATE event_images SET status = 'analyzed' WHERE id = ?", (image_id,))
-        conn.commit()
-
-        return {
-            "ok": True,
-            "image_id": image_id,
-            "event_num": row["event_num"],
-            "pending_images": queries.pending_images(conn),
-        }
-    finally:
-        conn.close()
-
-
-@mcp.tool()
-@_logged
 def get_event(num: str) -> dict:
-    """이벤트 한 건의 상세: 목록 정보, 구조화된 분석 JSON, 전체 전사문. 조건·유의사항·금액처럼 구체적인 질문에 답할 때 쓴다."""
+    """이벤트 한 건의 상세: 목록 정보, 요약 JSON(대상·기준). 조건·유의사항·금액처럼 구체적인 질문에 답할 때 쓴다."""
     conn = db.connect()
     try:
         event = queries.event_detail(conn, num)

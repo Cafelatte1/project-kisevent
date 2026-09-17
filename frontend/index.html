@@ -18,7 +18,6 @@
   --banki: #1baf7a;
   --good: #0ca30c;
   --warning: #fab219;
-  --serious: #ec835a;
   --critical: #d03b3b;
   --wash: rgba(11, 11, 11, 0.04);
 }
@@ -124,10 +123,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .badge { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; color: var(--ink-2); }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
-.dot.analyzed { background: var(--good); }
 .dot.summarized { background: var(--good); }
-.dot.transcribed { background: var(--warning); }
-.dot.transcribing { background: var(--serious); }
 .dot.failed { background: var(--critical); }
 .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); margin-right: 4px; white-space: nowrap; }
 .tag.영업점 { border-color: var(--branch); color: var(--branch); }
@@ -140,20 +136,10 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 #detail .sub { color: var(--ink-2); font-size: 13px; }
 .section { margin-top: 16px; }
 .section > h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em; }
-.benefit { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
-.benefit .name { font-weight: 600; }
-.benefit .reward { color: var(--ink-2); margin-top: 2px; }
 ul.list { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }
 ul.list li { margin: 2px 0; }
 ul.list.caveat li { color: var(--critical); }
 .kv { color: var(--ink-2); }
-details { margin-top: 16px; }
-summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
-pre.transcript {
-  white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; padding: 12px;
-  background: var(--plane); border: 1px solid var(--line); border-radius: 8px;
-  font-size: 12px; color: var(--ink-2); max-height: 420px; overflow: auto;
-}
 a { color: var(--branch); }
 .empty { padding: 18px; color: var(--muted); font-size: 13px; }
 
@@ -218,10 +204,7 @@ a { color: var(--branch); }
 </div>
 
 <script>
-const STATUS_LABEL = {
-  pending: "분석 대기", summarized: "요약 완료", transcribing: "전사 중", transcribed: "전사 완료",
-  analyzed: "분석 완료", failed: "실패",
-};
+const STATUS_LABEL = { pending: "요약 대기", summarized: "요약 완료", failed: "실패" };
 const TARGETS = [["", "전체보기"], ["영업점", "영업점"], ["뱅키스", "뱅키스"], ["연금", "연금"], ["미상", "미상"]];
 const ANALYSIS = [["", "전체"], ["summarized", "요약 완료"], ["none", "미요약"]];
 const EVENT_STATES = [["ongoing", "진행중"], ["ended", "종료"], ["all", "전체"]];
@@ -274,6 +257,12 @@ function statusBadge(status) {
   return badge;
 }
 
+function summaryText(summary) {
+  const text = (summary && summary.criteria && summary.criteria.text)
+    || (summary && summary.target && summary.target.text) || "";
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+}
+
 function targetTags(targetTypes) {
   const box = el("span");
   if (!targetTypes || !targetTypes.length) {
@@ -300,7 +289,6 @@ function renderStats(stats) {
   const imgs = $("tiles-img");
   imgs.replaceChildren(
     ...Object.keys(STATUS_LABEL).map((key) => tile(STATUS_LABEL[key], stats.images[key] ?? 0)),
-    tile("요약 대기", stats.images.pending_summaries ?? 0),
   );
 }
 
@@ -352,14 +340,11 @@ function renderEvents() {
     tr.append(el("td", "hide-sm dim", event.template || "—"));
 
     const status = el("td");
-    status.append(statusBadge(event.analysis_status));
+    status.append(statusBadge(event.summary_status === "summarized" ? "summarized" : "pending"));
     tr.append(status);
 
-    tr.append(
-      event.analysis_summary
-        ? el("td", "hide-sm", event.analysis_summary)
-        : el("td", "hide-sm dim", "미분석"),
-    );
+    const text = summaryText(event.summary);
+    tr.append(text ? el("td", "hide-sm", text) : el("td", "hide-sm dim", "-"));
     return tr;
   }));
 }
@@ -396,87 +381,6 @@ function bullets(items, cls) {
   const ul = el("ul", cls ? `list ${cls}` : "list");
   items.forEach((item) => ul.append(el("li", null, item)));
   return ul;
-}
-
-function periodsTable(periods) {
-  const table = el("table");
-  const head = el("tr");
-  ["유형", "시작", "종료", "비고"].forEach((h) => head.append(el("th", null, h)));
-  const thead = el("thead");
-  thead.append(head);
-  const tbody = el("tbody");
-  periods.forEach((p) => {
-    const tr = el("tr");
-    tr.append(el("td", null, p.type));
-    tr.append(el("td", "num", p.start || "—"));
-    tr.append(el("td", "num", p.end || "—"));
-    tr.append(el("td", p.note ? null : "dim", p.note || "—"));
-    tbody.append(tr);
-  });
-  table.append(thead, tbody);
-  const card = el("div", "card scroll");
-  card.append(table);
-  return card;
-}
-
-function benefitCard(benefit) {
-  const box = el("div", "benefit");
-  box.append(el("div", "name", benefit.name));
-  box.append(el("div", "reward", `${benefit.reward_type} · ${benefit.reward}`));
-  if (benefit.cap) box.append(el("div", "kv", `한도: ${benefit.cap}`));
-  if (benefit.lottery) {
-    const winners = benefit.lottery.winners ? `${benefit.lottery.winners}명` : "";
-    const note = [winners, benefit.lottery.note].filter(Boolean).join(" · ");
-    if (note) box.append(el("div", "kv", `추첨: ${note}`));
-  }
-  if (benefit.conditions && benefit.conditions.length) box.append(bullets(benefit.conditions));
-  if (benefit.caveats && benefit.caveats.length) box.append(bullets(benefit.caveats, "caveat"));
-  return box;
-}
-
-function analysisNodes(analysis) {
-  const nodes = [];
-  if (analysis.tagline) nodes.push(el("div", "sub", analysis.tagline));
-
-  if (analysis.periods && analysis.periods.length) {
-    nodes.push(section("기간", periodsTable(analysis.periods)));
-  }
-
-  const t = analysis.targets;
-  if (t) {
-    const box = el("div");
-    const chips = el("div");
-    [...(t.account_types || []), ...(t.customer_types || [])].forEach(
-      (name) => chips.append(el("span", "tag", name)),
-    );
-    box.append(chips);
-    if (t.conditions && t.conditions.length) box.append(bullets(t.conditions));
-    nodes.push(section("대상", box));
-  }
-
-  if (analysis.benefits && analysis.benefits.length) {
-    nodes.push(section("혜택", ...analysis.benefits.map(benefitCard)));
-  }
-
-  const p = analysis.participation;
-  if (p) {
-    const box = el("div");
-    box.append(el("div", "kv", p.requires_application ? "신청 필요" : "별도 신청 없음"));
-    if (p.auto_enroll) box.append(el("div", "kv", "자동 참여"));
-    if (p.channels && p.channels.length) box.append(el("div", "kv", `경로: ${p.channels.join(", ")}`));
-    if (p.steps && p.steps.length) box.append(bullets(p.steps));
-    if (p.consents && p.consents.length) box.append(bullets(p.consents));
-    nodes.push(section("참여", box));
-  }
-
-  if (analysis.notes && analysis.notes.length) nodes.push(section("유의사항", bullets(analysis.notes)));
-
-  const c = analysis.compliance;
-  if (c && (c.number || c.valid_from || c.valid_to)) {
-    const span = [c.valid_from, c.valid_to].filter(Boolean).join(" ~ ");
-    nodes.push(section("준법감시", el("div", "kv", [c.number, span].filter(Boolean).join(" · "))));
-  }
-  return nodes;
 }
 
 function summaryNodes(summary) {
@@ -544,20 +448,6 @@ function renderDetail(event) {
   link.rel = "noopener";
   meta.append(el("span", null, " · "), link);
   panel.append(section("배너", meta));
-
-  if (image.summary) panel.append(section("분석 요약", el("div", "kv", image.summary)));
-  if (image.analysis) {
-    panel.append(...analysisNodes(image.analysis));
-  } else {
-    panel.append(section("분석", el("div", "dim", "아직 분석되지 않았습니다")));
-  }
-
-  if (image.transcript && image.transcript.trim()) {
-    const details = el("details");
-    details.append(el("summary", null, "전사문 보기"));
-    details.append(el("pre", "transcript", image.transcript));
-    panel.append(details);
-  }
 }
 
 async function selectEvent(num) {

@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-PENDING_SQL = "SELECT COUNT(*) FROM event_images WHERE status NOT IN ('analyzed', 'superseded', 'failed')"
 PENDING_SUMMARY_SQL = (
     "SELECT COUNT(*) FROM event_images i WHERE i.status NOT IN ('superseded', 'failed')"
     " AND NOT EXISTS (SELECT 1 FROM image_summary s WHERE s.image_id = i.id)"
@@ -13,23 +12,12 @@ LATEST_IMAGE_SQL = (
     "SELECT id, status, local_path FROM event_images WHERE event_num = ? AND status != 'superseded'"
     " ORDER BY id DESC LIMIT 1"
 )
-IMAGE_STATUSES = ("pending", "summarized", "transcribing", "transcribed", "analyzed", "failed")
+IMAGE_STATUSES = ("pending", "summarized", "failed")
 TARGET_LABELS = ("영업점", "뱅키스", "연금", "미상")
-
-
-def pending_images(conn) -> int:
-    return conn.execute(PENDING_SQL).fetchone()[0]
 
 
 def pending_summaries(conn) -> int:
     return conn.execute(PENDING_SUMMARY_SQL).fetchone()[0]
-
-
-def transcript(conn, image_id: int) -> str:
-    rows = conn.execute(
-        "SELECT text FROM image_tiles WHERE image_id = ? ORDER BY idx", (image_id,)
-    ).fetchall()
-    return "\n\n".join(row["text"] or "" for row in rows)
 
 
 def _image_summary(conn, image_id: int):
@@ -41,17 +29,7 @@ def _image_summary(conn, image_id: int):
 def _event_view(conn, row) -> dict:
     """목록·일자 조회가 함께 쓰는 이벤트 한 건. 대상은 배너 요약(v2)에서 온다."""
     image = conn.execute(LATEST_IMAGE_SQL, (row["num"],)).fetchone()
-    summary = analysis = None
-    if image is not None:
-        summary = _image_summary(conn, image["id"])
-        analysis = conn.execute(
-            "SELECT summary FROM image_analysis WHERE image_id = ?", (image["id"],)
-        ).fetchone()
-
-    if summary is None:
-        summary_status = "none"
-    else:
-        summary_status = "analyzed" if image["status"] == "analyzed" else "summarized"
+    summary = _image_summary(conn, image["id"]) if image is not None else None
 
     return {
         "num": row["num"],
@@ -61,10 +39,8 @@ def _event_view(conn, row) -> dict:
         "period_start": row["period_start"],
         "period_end": row["period_end"],
         "summary": json.loads(summary["json"]) if summary is not None else None,
-        "summary_status": summary_status,
+        "summary_status": "none" if summary is None else "summarized",
         "template": row["template"],
-        "analysis_status": image["status"] if image is not None else None,
-        "analysis_summary": analysis["summary"] if analysis is not None else None,
     }
 
 
@@ -94,7 +70,6 @@ def list_events(conn, target: str | None = None, state: str = "ongoing") -> dict
 
     return {
         "fetched_at": last_run["finished_at"] if last_run is not None else None,
-        "pending_images": pending_images(conn),
         "pending_summaries": len(pending),
         "pending_event_nums": pending,
         "count": len(events),
@@ -146,16 +121,10 @@ def event_detail(conn, num: str) -> dict | None:
     if summary is not None:
         event["summary"] = json.loads(summary["json"])
 
-    analysis = conn.execute(
-        "SELECT summary, json FROM image_analysis WHERE image_id = ?", (image["id"],)
-    ).fetchone()
     event["image"] = {
         "image_id": image["id"],
         "status": image["status"],
         "image_url": f"/images/{Path(image['local_path']).name}",
-        "analysis": json.loads(analysis["json"]) if analysis is not None else None,
-        "summary": analysis["summary"] if analysis is not None else None,
-        "transcript": transcript(conn, image["id"]),
     }
     return event
 

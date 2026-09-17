@@ -43,31 +43,12 @@ CREATE TABLE IF NOT EXISTS event_images (
   UNIQUE(event_num, url)
 );
 
-CREATE TABLE IF NOT EXISTS image_tiles (
-  image_id INTEGER NOT NULL REFERENCES event_images(id),
-  idx INTEGER NOT NULL,
-  y0 INTEGER NOT NULL,
-  y1 INTEGER NOT NULL,
-  overlap INTEGER NOT NULL DEFAULT 0,
-  text TEXT,
-  transcribed_at TEXT,
-  PRIMARY KEY(image_id, idx)
-);
-
 CREATE TABLE IF NOT EXISTS image_summary (
   image_id INTEGER PRIMARY KEY REFERENCES event_images(id),
   schema_version INTEGER NOT NULL,
   json TEXT NOT NULL,
   target_types TEXT NOT NULL,
   summarized_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS image_analysis (
-  image_id INTEGER PRIMARY KEY REFERENCES event_images(id),
-  schema_version INTEGER NOT NULL,
-  summary TEXT NOT NULL,
-  json TEXT NOT NULL,
-  analyzed_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS scrape_runs (
@@ -83,6 +64,16 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
   events_seen INTEGER
 );
 """
+
+DROPPED_TABLES = ("image_tiles", "image_analysis")
+
+# 전사·구조화(v1) 어휘로 남아 있는 status를 요약(v2) 어휘로 옮긴다.
+STATUS_MIGRATIONS = (
+    "UPDATE event_images SET status = 'pending' WHERE status IN ('transcribing', 'transcribed')",
+    "UPDATE event_images SET status = CASE WHEN EXISTS"
+    " (SELECT 1 FROM image_summary s WHERE s.image_id = event_images.id)"
+    " THEN 'summarized' ELSE 'pending' END WHERE status = 'analyzed'",
+)
 
 ADDED_COLUMNS = {
     "event_images": {
@@ -112,10 +103,23 @@ def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
+def _drop_legacy_tables(conn: sqlite3.Connection) -> None:
+    for table in DROPPED_TABLES:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).fetchone()
+        if exists:
+            conn.execute(f"DROP TABLE {table}")
+            logger.info("table dropped table={}", table)
+
+
 def init_schema(conn: sqlite3.Connection) -> list[str]:
     """마이그레이션으로 추가된 컬럼 이름(table.column) 목록을 돌려준다."""
     ensure_dirs()
     conn.executescript(SCHEMA)
+    _drop_legacy_tables(conn)
+    for statement in STATUS_MIGRATIONS:
+        conn.execute(statement)
 
     added: list[str] = []
     for table, columns in ADDED_COLUMNS.items():

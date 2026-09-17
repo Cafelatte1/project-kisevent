@@ -19,7 +19,7 @@ def health() -> dict:
         return {
             "ok": True,
             "last_run": dict(last_run) if last_run is not None else None,
-            "pending_images": queries.pending_images(conn),
+            "pending_summaries": queries.pending_summaries(conn),
         }
     finally:
         conn.close()
