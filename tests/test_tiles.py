@@ -5,7 +5,15 @@ import pytest
 from PIL import Image
 
 from backend.core import db
-from backend.core.tiles import BAND, BLANK_THRESHOLD, MAX_TILE, _row_scores, plan_tiles
+from backend.core.tiles import (
+    BAND,
+    BLANK_THRESHOLD,
+    FALLBACK_OVERLAP,
+    MAX_TILE,
+    TARGET,
+    _row_scores,
+    plan_tiles,
+)
 
 
 def _largest_banner():
@@ -21,11 +29,13 @@ def test_plan_tiles_on_real_banner():
     tiles = plan_tiles(str(banner))
     scores = _row_scores(str(banner))
 
-    for y0, y1, overlap in tiles[:-1]:
+    for (y0, y1, _), (_, _, next_overlap) in zip(tiles[:-1], tiles[1:]):
         assert 1600 <= y1 - y0 <= MAX_TILE
-        assert overlap == 0
         band = scores[y1 - BAND // 2 : y1 + BAND // 2]
-        assert band.mean() < BLANK_THRESHOLD
+        if next_overlap == 0:
+            assert band.mean() < BLANK_THRESHOLD
+        else:
+            assert next_overlap == FALLBACK_OVERLAP and y1 - y0 == TARGET
 
     assert tiles[0][0] == 0
     assert tiles[-1][1] == len(scores)
