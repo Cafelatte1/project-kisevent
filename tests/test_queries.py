@@ -5,6 +5,7 @@ import json
 import pytest
 
 from backend.core import db, queries
+from backend.mcp import server
 
 
 def _event(conn, num, title, start, end, state):
@@ -61,14 +62,21 @@ def conn(tmp_path, monkeypatch):
     connection.close()
 
 
-def test_list_events_filters_by_summary_target_types(conn):
+def test_list_events_target_keeps_unsummarized_and_counts_pending(conn):
     result = queries.list_events(conn, target="뱅키스")
 
-    assert result["count"] == 1
-    assert [event["num"] for event in result["events"]] == ["100"]
-    assert result["events"][0]["target_types"] == ["뱅키스"]
-    assert result["events"][0]["summary"]["criteria"]["text"] == "국내주식"
-    assert result["pending_summaries"] == 0 and result["pending_event_nums"] == []
+    assert result["count"] == 2
+    assert [event["num"] for event in result["events"]] == ["200", "100"]
+    assert result["events"][1]["target_types"] == ["뱅키스"]
+    assert result["events"][1]["summary"]["criteria"]["text"] == "국내주식"
+    assert result["pending_summaries"] == 1 and result["pending_event_nums"] == ["200"]
+
+
+def test_list_events_target_excludes_summarized_other_target(conn):
+    result = queries.list_events(conn, target="영업점")
+
+    assert [event["num"] for event in result["events"]] == ["200"]
+    assert result["pending_summaries"] == 1 and result["pending_event_nums"] == ["200"]
 
 
 def test_list_events_without_target_keeps_unsummarized(conn):
@@ -90,13 +98,30 @@ def test_events_on_orders_ongoing_first_then_period_end(conn):
 
 
 def test_events_on_target_matches_every_listed_type(conn):
-    assert [event["num"] for event in queries.events_on(conn, "2026-09-17", "뱅키스")] == ["100", "300"]
-    assert [event["num"] for event in queries.events_on(conn, "2026-09-17", "영업점")] == ["300"]
+    assert [event["num"] for event in queries.events_on(conn, "2026-09-17", "뱅키스")] == [
+        "200",
+        "100",
+        "300",
+    ]
+    assert [event["num"] for event in queries.events_on(conn, "2026-09-17", "영업점")] == [
+        "200",
+        "300",
+    ]
 
 
 def test_events_on_excludes_dates_outside_period(conn):
     assert [event["num"] for event in queries.events_on(conn, "2026-02-01")] == ["400"]
     assert queries.events_on(conn, "2026-11-01") == []
+
+
+def test_events_on_tool_returns_dict_with_notice_and_pending(conn):
+    result = server.events_on("2026-09-17", "영업점")
+
+    assert result["date"] == "2026-09-17" and result["target"] == "영업점"
+    assert "1건 미요약" in result["notice"] and "200" in result["notice"]
+    assert result["count"] == 2
+    assert result["pending_summaries"] == 1 and result["pending_event_nums"] == ["200"]
+    assert [event["num"] for event in result["events"]] == ["200", "300"]
 
 
 def test_by_target_counts_unsummarized_as_unknown(conn):

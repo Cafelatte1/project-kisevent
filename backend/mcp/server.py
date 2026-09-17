@@ -59,16 +59,9 @@ def _claim_cutoff() -> str:
     return (datetime.now(timezone.utc) - timedelta(minutes=CLAIM_TIMEOUT_MIN)).isoformat()
 
 
-def _cell(value, limit: int | None = None) -> str:
-    text = str(value or "").replace("|", "/").strip()
-    if not text:
-        return "-"
-    return text[:limit] if limit else text
-
-
 @mcp.tool()
 def list_events(target: str | None = None) -> dict:
-    """현재 진행 중인 한국투자증권 이벤트 목록. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 조건·유의사항·혜택 금액처럼 상세한 내용이 필요할 때만 get_pending_tiles → save_tile_text → get_transcript → save_analysis(전체 전사)를 쓴다."""
+    """현재 진행 중인 한국투자증권 이벤트 목록. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 조건·유의사항·혜택 금액처럼 상세한 내용이 필요할 때만 get_pending_tiles → save_tile_text → get_transcript → save_analysis(전체 전사)를 쓴다."""
     conn = db.connect()
     try:
         return queries.list_events(conn, target)
@@ -77,8 +70,8 @@ def list_events(target: str | None = None) -> dict:
 
 
 @mcp.tool()
-def events_on(date: str, target: str | None = None) -> str:
-    """특정 일자에 신청 기간이 걸려 있던 이벤트를 마크다운 표로 돌려준다(종료 이벤트 포함). date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 표 앞에 요약되지 않은 이벤트 수와 번호가 붙는다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 대상이 '미상'으로 표시된다."""
+def events_on(date: str, target: str | None = None) -> dict:
+    """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
     conn = db.connect()
     try:
         events = queries.events_on(conn, date, target)
@@ -87,31 +80,22 @@ def events_on(date: str, target: str | None = None) -> str:
 
     missing = [event["num"] for event in events if event["summary_status"] == "none"]
     if missing:
-        head = (
+        notice = (
             f"※ {len(events)}건 중 {len(missing)}건 미요약 (번호: {', '.join(missing)})."
             " list_pending_summaries(event_nums=[...])로 image_id를 받아 먼저 요약한 뒤 다시 조회하세요."
         )
     else:
-        head = f"※ {len(events)}건 모두 요약 완료."
+        notice = f"※ {len(events)}건 모두 요약 완료."
 
-    lines = [
-        "| 번호 | 제목 | 대상 | 기간 | 상태 | 대상 상품·계좌 | 실적 인정 |",
-        "|---|---|---|---|---|---|---|",
-    ]
-    for event in events:
-        criteria = (event["summary"] or {}).get("criteria") or {}
-        cells = [
-            _cell(event["num"]),
-            _cell(event["title"]),
-            _cell("·".join(event["target_types"] or []) or "미상"),
-            _cell(f"{event['period_start']}~{event['period_end']}"),
-            _cell("진행중" if event["state"] == "ongoing" else "종료"),
-            _cell(criteria.get("text"), 60),
-            _cell(criteria.get("performance"), 60),
-        ]
-        lines.append(f"| {' | '.join(cells)} |")
-
-    return f"{head}\n\n" + "\n".join(lines)
+    return {
+        "date": date,
+        "target": target,
+        "notice": notice,
+        "count": len(events),
+        "pending_summaries": len(missing),
+        "pending_event_nums": missing,
+        "events": events,
+    }
 
 
 @mcp.tool()

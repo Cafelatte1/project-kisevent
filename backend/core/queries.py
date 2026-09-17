@@ -69,9 +69,12 @@ def _event_view(conn, row) -> dict:
 
 
 def _matches_target(target_types: list[str] | None, target: str | None) -> bool:
+    """요약이 없는 이벤트(target_types null)는 대상이 그 target일 수 있으므로 통과시킨다."""
     if not target:
         return True
-    return bool(target_types) and target in target_types
+    if target_types is None:
+        return True
+    return target in target_types
 
 
 def list_events(conn, target: str | None = None, state: str = "ongoing") -> dict:
