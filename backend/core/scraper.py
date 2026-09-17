@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import os
 import re
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
@@ -20,8 +21,8 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 TABS = {"01": "영업점", "02": "뱅키스"}
 # 진행중 탭(i)과 지난 이벤트 탭(t)
 LIST_TAB = {"live": "i", "backfill": "t"}
-BACKFILL_DAYS = 365
-MAX_PAGES = 60
+BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "365"))  # 0이면 지난 이벤트 탭 전체
+MAX_PAGES = 20
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -338,7 +339,9 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
     failed: list[str] = []
 
     gubun = LIST_TAB[mode]
-    stop_before = date.today() - timedelta(days=BACKFILL_DAYS) if mode == "backfill" else None
+    stop_before = (
+        date.today() - timedelta(days=BACKFILL_DAYS) if mode == "backfill" and BACKFILL_DAYS > 0 else None
+    )
 
     try:
         with httpx.Client(headers=HEADERS, timeout=30.0, follow_redirects=True) as client:
