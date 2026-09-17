@@ -2,11 +2,13 @@
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from loguru import logger
 
 from backend.core import crawl, db, queries, scraper
 from backend.core.scheduler import SCRAPE_INTERVAL_MIN
 
 router = APIRouter(prefix="/api")
+log = logger.bind(ctx="api")
 
 
 @router.get("/health")
@@ -92,15 +94,19 @@ def crawl_status() -> dict:
 @router.post("/scrape")
 def scrape(mode: str = "live"):
     if mode not in scraper.LIST_TAB:
+        log.info("scrape requested mode={} -> 400", mode)
         return JSONResponse(status_code=400, content={"error": "mode must be live or backfill"})
     try:
         crawl.start_background(mode, "manual")
     except crawl.AlreadyRunning:
+        log.info("scrape requested mode={} -> 409", mode)
         return JSONResponse(status_code=409, content={"error": "already running"})
     except crawl.Debounced as exc:
+        log.info("scrape requested mode={} -> 429", mode)
         return JSONResponse(
             status_code=429,
             content={"error": "too soon", "retry_after_sec": exc.retry_after_sec},
             headers={"Retry-After": str(exc.retry_after_sec)},
         )
+    log.info("scrape requested mode={} -> 202", mode)
     return JSONResponse(status_code=202, content={"started": True, "mode": mode})

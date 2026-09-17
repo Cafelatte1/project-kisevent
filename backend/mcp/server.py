@@ -1,9 +1,13 @@
 """Claude Desktop이 붙는 MCP tool 정의."""
 
 import base64
+import functools
+import inspect
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
+from loguru import logger
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ContentBlock, ImageContent, TextContent
 from pydantic import ValidationError
@@ -51,6 +55,39 @@ SUMMARY_ORDER_SQL = (
 )
 
 
+log = logger.bind(ctx="mcp")
+
+# 이미지 bytes·JSON 본문은 로그에 넣지 않는다
+KEY_ARGS = ("image_id", "event_num", "event_nums", "target", "date", "limit", "num")
+
+
+def _logged(func):
+    """tool 호출 한 줄: 이름·핵심 인자·소요 시간."""
+    signature = inspect.signature(func)
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        started = time.monotonic()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            bound = signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+            shown = " ".join(
+                f"{name}={bound.arguments[name]}"
+                for name in KEY_ARGS
+                if bound.arguments.get(name) is not None
+            )
+            log.info(
+                "tool={}{} elapsed={}s",
+                func.__name__,
+                f" {shown}" if shown else "",
+                round(time.monotonic() - started, 3),
+            )
+
+    return wrapper
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -60,6 +97,7 @@ def _claim_cutoff() -> str:
 
 
 @mcp.tool()
+@_logged
 def list_events(target: str | None = None) -> dict:
     """현재 진행 중인 한국투자증권 이벤트 목록. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 조건·유의사항·혜택 금액처럼 상세한 내용이 필요할 때만 get_pending_tiles → save_tile_text → get_transcript → save_analysis(전체 전사)를 쓴다."""
     conn = db.connect()
@@ -70,6 +108,7 @@ def list_events(target: str | None = None) -> dict:
 
 
 @mcp.tool()
+@_logged
 def events_on(date: str, target: str | None = None) -> dict:
     """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
     conn = db.connect()
@@ -99,6 +138,7 @@ def events_on(date: str, target: str | None = None) -> dict:
 
 
 @mcp.tool()
+@_logged
 def list_pending_summaries(limit: int = 20, event_nums: list[str] | None = None) -> dict:
     """요약되지 않은 배너 이미지 목록(image_id, event_num, title). 진행중 이벤트가 먼저, 그다음 종료일 내림차순. event_nums를 주면 그 이벤트들만. Claude Code라면 이 목록의 image_id마다 banner-summarizer 서브에이전트를 하나씩 병렬로 띄워라(건당 이미지 1장). 서브에이전트를 쓸 수 없는 환경이면 get_summary_tiles → save_summary를 image_id별로 직접 순서대로 수행한다."""
     conn = db.connect()
@@ -123,6 +163,7 @@ def list_pending_summaries(limit: int = 20, event_nums: list[str] | None = None)
 
 
 @mcp.tool()
+@_logged
 def get_summary_tiles(
     limit: int = 1, event_nums: list[str] | None = None, image_id: int | None = None
 ) -> list[ContentBlock]:
@@ -146,6 +187,7 @@ def get_summary_tiles(
             ).fetchone()
 
         if row is None:
+            log.debug("no pending images")
             return [TextContent(type="text", text="요약할 이미지가 없습니다")]
 
         y0, y1 = tiles.summary_crop(row["local_path"])
@@ -153,6 +195,7 @@ def get_summary_tiles(
             "UPDATE event_images SET summary_claimed_at = ? WHERE id = ?", (_now(), row["id"])
         )
         conn.commit()
+        log.debug("claimed image_id={}", row["id"])
 
         meta = {
             "image_id": row["id"],
@@ -179,23 +222,24 @@ def get_summary_tiles(
 
 
 @mcp.tool()
+@_logged
 def save_summary(image_id: int, summary: dict) -> dict:
     """schema_version 2 요약 저장. 검증 실패면 errors를 돌려주니 고쳐서 다시 호출하라. 저장되면 그 이벤트의 대상(target_types)이 list_events·events_on에 반영된다."""
     try:
         parsed = SummaryV2.model_validate(summary)
     except ValidationError as exc:
-        return {
-            "ok": False,
-            "errors": [
-                f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
-                for error in exc.errors()
-            ],
-        }
+        errors = [
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in exc.errors()
+        ]
+        log.warning("save_summary rejected image_id={} errors={}", image_id, errors[:3])
+        return {"ok": False, "errors": errors}
 
     conn = db.connect()
     try:
         row = conn.execute("SELECT event_num FROM event_images WHERE id = ?", (image_id,)).fetchone()
         if row is None:
+            log.warning("not found image_id={}", image_id)
             return {"ok": False, "errors": [f"image_id {image_id}를 찾을 수 없습니다"]}
 
         target_types = parsed.target.types
@@ -231,6 +275,7 @@ def save_summary(image_id: int, summary: dict) -> dict:
 
 
 @mcp.tool()
+@_logged
 def get_pending_tiles(limit: int = 2, image_id: int | None = None) -> list[ContentBlock]:
     """미분석 배너 이미지의 다음 타일을 최대 limit장 돌려준다(타일당 1120×약2000px, 위에서 아래 순서). 각 타일 앞의 텍스트에 image_id, tile_idx, tile_total, overlap이 있다. 타일을 보고 보이는 글자를 그대로 전사해 save_tile_text로 저장하라. overlap이 150인 타일은 상단 150px가 이전 타일과 겹치므로 중복되는 줄은 빼고 전사한다. 한 이미지의 타일이 모두 저장되면 그 이미지는 transcribed 상태가 되고 get_transcript로 넘어간다. 응답이 '분석할 이미지가 없습니다'면 모든 이미지가 처리된 것이다. image_id를 주면 그 이미지를 이어서 돌려준다."""
     limit = max(1, min(3, limit))
@@ -250,6 +295,7 @@ def get_pending_tiles(limit: int = 2, image_id: int | None = None) -> list[Conte
                 "SELECT id FROM event_images WHERE status = 'pending' ORDER BY id LIMIT 1"
             ).fetchone()
         if row is None:
+            log.debug("no pending images")
             return [TextContent(type="text", text="분석할 이미지가 없습니다")]
 
         image_id = row["id"]
@@ -293,6 +339,7 @@ def get_pending_tiles(limit: int = 2, image_id: int | None = None) -> list[Conte
 
 
 @mcp.tool()
+@_logged
 def save_tile_text(image_id: int, tile_idx: int, text: str) -> dict:
     """타일 전사 결과 저장. text는 타일에 보이는 글자를 순서대로 옮긴 원문이다(요약·해석 금지, 표는 행마다 셀을 ' | '로 구분). 글자가 전혀 없는 장식 타일은 빈 문자열로 저장한다. 응답의 remaining_tiles가 0이면 get_transcript(image_id)로 넘어가라."""
     conn = db.connect()
@@ -320,6 +367,7 @@ def save_tile_text(image_id: int, tile_idx: int, text: str) -> dict:
 
 
 @mcp.tool()
+@_logged
 def get_transcript(image_id: int) -> dict:
     """이미지 전체 전사문과 목록·HTML에서 얻은 메타데이터, 구조화 안내를 돌려준다. 이것을 읽고 schema_version 1 JSON으로 구조화한 뒤 save_analysis로 저장하라."""
     conn = db.connect()
@@ -331,6 +379,7 @@ def get_transcript(image_id: int) -> dict:
             (image_id,),
         ).fetchone()
         if row is None:
+            log.warning("not found image_id={}", image_id)
             return {"error": "not found"}
 
         result = {
@@ -357,26 +406,29 @@ def get_transcript(image_id: int) -> dict:
 
 
 @mcp.tool()
+@_logged
 def save_analysis(image_id: int, analysis: dict, summary: str) -> dict:
     """구조화 결과 저장. analysis는 schema_version 1 JSON, summary는 대상+핵심 혜택+신청 기간을 담은 200자 이내 한 문장(list_events에 그대로 실린다). 검증에 실패하면 오류 내용을 돌려주니 고쳐서 다시 호출하라."""
     try:
         parsed = AnalysisV1.model_validate(analysis)
     except ValidationError as exc:
-        return {
-            "ok": False,
-            "errors": [
-                f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
-                for error in exc.errors()
-            ],
-        }
+        errors = [
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in exc.errors()
+        ]
+        log.warning("save_analysis rejected image_id={} errors={}", image_id, errors[:3])
+        return {"ok": False, "errors": errors}
 
     if len(summary) > 200:
-        return {"ok": False, "errors": [f"summary가 200자를 넘습니다({len(summary)}자)"]}
+        errors = [f"summary가 200자를 넘습니다({len(summary)}자)"]
+        log.warning("save_analysis rejected image_id={} errors={}", image_id, errors)
+        return {"ok": False, "errors": errors}
 
     conn = db.connect()
     try:
         row = conn.execute("SELECT event_num FROM event_images WHERE id = ?", (image_id,)).fetchone()
         if row is None:
+            log.warning("not found image_id={}", image_id)
             return {"ok": False, "errors": [f"image_id {image_id}를 찾을 수 없습니다"]}
 
         conn.execute(
@@ -400,6 +452,7 @@ def save_analysis(image_id: int, analysis: dict, summary: str) -> dict:
 
 
 @mcp.tool()
+@_logged
 def get_event(num: str) -> dict:
     """이벤트 한 건의 상세: 목록 정보, 구조화된 분석 JSON, 전체 전사문. 조건·유의사항·금액처럼 구체적인 질문에 답할 때 쓴다."""
     conn = db.connect()

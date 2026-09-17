@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+사용자가 "셋팅해줘"라고 하면(서빙 PC, 비개발자) `SETUP.md`를 처음부터 끝까지 그대로 수행한다 — uv 설치, `uv sync`, 작업 스케줄러 등록, Claude Code/Desktop 연결, 최종 검증까지 에이전트가 한다.
+
 ## 프로젝트
 
 KIS Event: 한국투자증권 이벤트 공고(영업점·뱅키스 고객대상)를 15분 주기로 스크랩해 SQLite에 쌓고, Claude Desktop이 MCP로 붙어 "지금 영업점 고객대상 이벤트가 뭐가 있어?"에 답하는 로컬 개인용 서비스.
@@ -16,14 +18,17 @@ KIS Event: 한국투자증권 이벤트 공고(영업점·뱅키스 고객대상
 - `.claude/agents/banner-summarizer.md` — 배너 1장을 요약하는 Sonnet 서브에이전트(도구는 `get_summary_tiles`·`save_summary`뿐). MCP 서버 이름을 `kis-event`로 등록해야 도구 이름이 맞는다
   - `main.py` — 앱 조립과 기동
 - `frontend/index.html` — 빌드 없는 단일 파일 대시보드(이벤트 현황·대상 필터, 분석 완료/대기 수, 최근 스크랩 실행 이력, 신규 유입)
-- `data/` — `events.db`, `images/`(원본 배너). 커밋하지 않는다
+- `data/` — `events.db`, `images/`(원본 배너). 커밋하지 않는다. `KISEVENT_DATA_DIR`로 옮길 수 있다
+- 로그 — `backend/core/logging.py`(loguru). 파일은 `%LOCALAPPDATA%\kisevent\logs\app.log`(macOS `~/Library/Application Support/kisevent/logs/`), 10MB 롤링 5개. 포맷 `시각 | 레벨 | ctx | 모듈:줄 | 메시지`, ctx는 live/backfill/scheduler/mcp/api/boot/tiles. uvicorn·apscheduler·httpx 표준 로깅은 여기로 합류하고 httpx 요청·access 로그는 DEBUG. 환경변수 `KISEVENT_LOG_DIR`, `KISEVENT_LOG_LEVEL`, `KISEVENT_FILE_LOG_LEVEL`, `KISEVENT_APP_DIR`
 - `docs/event-page-research.md` — 사이트 실측 리서치와 설계 결정
-- `run.bat` — Windows에서 4000 포트 점유 프로세스를 죽이고 서버 기동
+- `SETUP.md` — 서빙 PC(Windows, 비개발자) 설치 절차. 에이전트가 그대로 수행한다
+- `.mcp.json` — Claude Code가 이 폴더에서 `kis-event`(HTTP `/mcp`)를 자동 인식하게 하는 설정
+- `run.bat` / `run-hidden.vbs` — Windows: 4000 포트 점유 프로세스를 죽이고 서버 기동(vbs는 창 없이, 작업 스케줄러용). `run.sh` — macOS/Linux 동일 동작
 
 ## 주요 명령 (레포 루트 기준)
 
 - 환경: `uv sync`
-- 서버: `uv run uvicorn backend.main:app --port 4000` (Windows는 `run.bat`)
+- 서버: `./run.sh`(macOS) / `run.bat`(Windows) / `uv run python -m backend.main` — 모두 `127.0.0.1:4000`
 - 즉시 스크랩 1회: `uv run python -m backend.core.scraper --mode live|backfill` (서버가 떠 있으면 대시보드 버튼이나 `POST /api/scrape?mode=`)
 - 테스트: `uv run pytest`
 - Claude Desktop 연결: `claude_desktop_config.json`에 `{"command": "uv", "args": ["--directory", "<레포 경로>", "run", "python", "-m", "backend.mcp.stdio"]}`. HTTP 커넥터를 받으면 `http://localhost:4000/mcp`도 된다

@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import logging
 import os
 import re
 from collections.abc import Callable
@@ -12,6 +11,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from loguru import logger
 from PIL import Image
 
 from backend.core import db
@@ -25,8 +25,6 @@ BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "365"))  # 0이면 지난 �
 MAX_PAGES = 20
 
 Image.MAX_IMAGE_PIXELS = None
-
-logger = logging.getLogger(__name__)
 
 _NUM_RE = re.compile(r"doView\('(\d+)'\)")
 _BODY_RE = re.compile(r"<!--b:s-->(.*?)<!--b:e-->", re.DOTALL)
@@ -312,6 +310,8 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
     if mode not in LIST_TAB:
         raise ValueError(f"알 수 없는 mode: {mode}")
 
+    log = logger.bind(ctx=mode)
+
     conn = db.connect()
     db.init_schema(conn)
 
@@ -341,6 +341,7 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
             def report(code: str, page: int, items: list[dict]) -> None:
                 progress["pages"] += 1
                 progress["events"] += len(items)
+                log.debug("page fetched code={} page={} items={}", code, page, len(items))
                 if on_progress is not None:
                     on_progress(progress["pages"], progress["events"])
 
@@ -349,7 +350,6 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
                 lists[code], read = fetch_list_all(client, code, gubun, stop_before, report)
                 pages += read
             merged = _merge_lists(lists)
-            logger.info("%s 목록 %d건 수집(%d페이지)", mode, len(merged), pages)
 
             now = _now()
             for event in merged:
@@ -360,8 +360,10 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
                 )
                 if result == "new":
                     new_count += 1
+                    log.debug("event new num={}", event["num"])
                 elif result == "updated":
                     updated_count += 1
+                    log.debug("event updated num={}", event["num"])
             if mode == "live":
                 _mark_ended(conn, {event["num"] for event in merged})
             conn.commit()
@@ -378,8 +380,8 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
                     response = client.get(detail_url(num, event["codes"][0], row["seen_tab"]))
                     response.raise_for_status()
                     detail = parse_detail(response.text)
-                except Exception:
-                    logger.exception("이벤트 %s 상세 조회 실패", num)
+                except Exception as exc:
+                    log.warning("detail failed num={} error={}", num, exc)
                     failed.append(num)
                     continue
 
@@ -398,8 +400,10 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
                     try:
                         if _store_image(conn, client, num, detail["image_url"], _now()):
                             image_count += 1
-                    except Exception:
-                        logger.exception("이벤트 %s 이미지 저장 실패", num)
+                    except Exception as exc:
+                        log.warning(
+                            "image failed num={} url={} error={}", num, detail["image_url"], exc
+                        )
                         failed.append(num)
 
                 conn.commit()
@@ -434,9 +438,11 @@ def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None 
 if __name__ == "__main__":
     import argparse
 
+    from backend.core.logging import setup
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=sorted(LIST_TAB), default="live")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    setup("cli")
     print(json.dumps(run_once(args.mode), ensure_ascii=False))

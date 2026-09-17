@@ -1,11 +1,12 @@
 """크롤링 실행 게이트와 진행 상태. 스케줄러·REST가 함께 쓴다."""
 
-import logging
 import math
 import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+
+from loguru import logger
 
 from backend.core import scraper
 
@@ -13,8 +14,6 @@ DEBOUNCE_SEC = 60
 
 # 테스트에서 갈아끼울 수 있게 간접 참조한다
 RUNNER = scraper.run_once
-
-logger = logging.getLogger(__name__)
 
 
 class AlreadyRunning(Exception):
@@ -68,14 +67,19 @@ def _begin(mode: str, trigger: str) -> None:
     """호출 스레드에서 게이트를 통과시킨다. 통과하면 락을 쥔 채로 돌아온다."""
     global _last_started_at
 
+    log = logger.bind(ctx=mode)
+
     if not _lock.acquire(blocking=False):
+        log.info("run rejected reason=already_running")
         raise AlreadyRunning()
 
     try:
         if trigger == "manual" and _last_started_at is not None:
             elapsed = time.monotonic() - _last_started_at
             if elapsed < DEBOUNCE_SEC:
-                raise Debounced(max(1, math.ceil(DEBOUNCE_SEC - elapsed)))
+                retry_after = max(1, math.ceil(DEBOUNCE_SEC - elapsed))
+                log.info("run rejected reason=debounced retry_after={}", retry_after)
+                raise Debounced(retry_after)
 
         _last_started_at = time.monotonic()
         with _state_lock:
@@ -89,6 +93,8 @@ def _begin(mode: str, trigger: str) -> None:
         _lock.release()
         raise
 
+    log.info("run start mode={} trigger={}", mode, trigger)
+
 
 def _on_progress(page: int, events_seen: int) -> None:
     with _state_lock:
@@ -97,11 +103,25 @@ def _on_progress(page: int, events_seen: int) -> None:
 
 
 def _execute(mode: str) -> dict:
+    log = logger.bind(ctx=mode)
+    started = time.monotonic()
+
     try:
         result = RUNNER(mode, _on_progress)
         error = None
+        log.info(
+            "run done run_id={} events={} new={} updated={} images={} failed={} pages={} elapsed={}s",
+            result.get("run_id"),
+            result.get("events"),
+            result.get("new"),
+            result.get("updated"),
+            result.get("images"),
+            len(result.get("failed") or []),
+            result.get("pages"),
+            round(time.monotonic() - started, 1),
+        )
     except Exception as exc:
-        logger.exception("%s 크롤링 실패", mode)
+        log.exception("run failed mode={} error={}", mode, exc)
         result = {"error": str(exc)}
         error = str(exc)
 

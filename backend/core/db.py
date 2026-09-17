@@ -1,14 +1,12 @@
 """sqlite 연결과 스키마."""
 
 import sqlite3
-from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-DB_PATH = DATA_DIR / "events.db"
-IMAGE_DIR = DATA_DIR / "images"
+from loguru import logger
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+from backend.core.paths import DATA_DIR, DB_PATH, IMAGE_DIR, ensure_dirs
+
+__all__ = ["DATA_DIR", "DB_PATH", "IMAGE_DIR", "connect", "init_schema"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -114,17 +112,26 @@ def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
-def init_schema(conn: sqlite3.Connection) -> None:
+def init_schema(conn: sqlite3.Connection) -> list[str]:
+    """마이그레이션으로 추가된 컬럼 이름(table.column) 목록을 돌려준다."""
+    ensure_dirs()
     conn.executescript(SCHEMA)
 
+    added: list[str] = []
     for table, columns in ADDED_COLUMNS.items():
         existing = _columns(conn, table)
         for name, decl in columns.items():
             if name not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                added.append(f"{table}.{name}")
+                logger.info("column added table={} column={}", table, name)
                 if table == "events" and name == "state" and "active" in existing:
                     conn.execute(
                         "UPDATE events SET state = CASE WHEN active = 1 THEN 'ongoing' ELSE 'ended' END"
                     )
 
+    if not added:
+        logger.debug("schema unchanged")
+
     conn.commit()
+    return added

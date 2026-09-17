@@ -1,16 +1,14 @@
 """스크랩 주기 실행."""
 
-import logging
 import os
 from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from loguru import logger
 
 from backend.core import crawl, db
 
 SCRAPE_INTERVAL_MIN = int(os.environ.get("SCRAPE_INTERVAL_MIN", "15"))
-
-logger = logging.getLogger(__name__)
 
 _scheduler: BackgroundScheduler | None = None
 _backfill_checked = False
@@ -37,6 +35,8 @@ def _backfill_done() -> bool:
 
 
 def _live_job() -> None:
+    log = logger.bind(ctx="scheduler")
+    log.info("job fired mode=live")
     try:
         crawl.run("live", trigger="scheduler")
     finally:
@@ -46,7 +46,7 @@ def _live_job() -> None:
     if not _backfill_checked:
         _backfill_checked = True
         if not _backfill_done():
-            logger.info("완료된 백필 이력이 없어 1년 백필을 시작한다")
+            log.info("backfill auto-start reason=no_completed_backfill")
             crawl.start_background("backfill", trigger="scheduler")
 
 
@@ -66,7 +66,6 @@ def start() -> BackgroundScheduler:
     )
     _scheduler.start()
     _publish_next_run()
-    logger.info("스케줄러 시작: %d분 주기", SCRAPE_INTERVAL_MIN)
     return _scheduler
 
 
