@@ -253,7 +253,7 @@ def get_summary_tiles(
 @mcp.tool()
 @_logged
 def save_summary(image_id: int, summary: dict) -> dict:
-    """schema_version 2 요약 저장. 검증 실패면 errors를 돌려주니 고쳐서 다시 호출하라. 저장되면 그 이벤트의 대상(target_types)이 list_events·events_on에 반영된다."""
+    """schema_version 2 요약 저장. summary는 get_summary_tiles 안내문의 형식 그대로: {"analysis": str, "target": {"types": [영업점|뱅키스|연금…], "text": 참여대상 문구 원문, "conditions": [str], "exclusions": [str]}, "criteria": {"text": str, "products": [str], "performance": str|null} | null, "block_found": bool}. block_found가 true면 target.text는 비면 안 된다. 검증 실패면 errors를 돌려주니 고쳐서 다시 호출하라. 저장되면 그 이벤트의 대상(target_types)이 list_events·events_on에 반영된다."""
     try:
         parsed = SummaryV2.model_validate(summary)
     except ValidationError as exc:

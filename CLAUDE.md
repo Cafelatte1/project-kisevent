@@ -19,7 +19,7 @@ KIS Event: 한국투자증권 이벤트 공고(영업점·뱅키스 고객대상
   - `main.py` — 앱 조립과 기동
 - `frontend/index.html` — 빌드 없는 단일 파일 상태판: 마지막 수집 n분 전, 주기 두 배를 넘기면 중단 경고, 진행중·요약 전·대상별 타일, 이벤트 표(대상·기간·요약)와 상세, 변화가 있었던 수집 이력. 버튼은 백필 하나뿐이고 라이브 동기화는 MCP `sync_now`로 한다
 - `data/` — `events.db`, `images/`(원본 배너). 커밋하지 않는다. `KISEVENT_DATA_DIR`로 옮길 수 있다
-- 로그 — `backend/core/logging.py`(loguru). 파일은 `%LOCALAPPDATA%\kisevent\logs\app.log`(macOS `~/Library/Application Support/kisevent/logs/`), 10MB 롤링 5개. 포맷 `시각 | 레벨 | ctx | 모듈:줄 | 메시지`, ctx는 live/backfill/scheduler/mcp/api/boot/tiles. 테이블은 `events`·`event_images`(status: pending|summarized|failed|superseded)·`image_summary`·`scrape_runs` 넷. uvicorn·apscheduler·httpx 표준 로깅은 여기로 합류하고 httpx 요청·access 로그는 DEBUG. 환경변수 `KISEVENT_LOG_DIR`, `KISEVENT_LOG_LEVEL`, `KISEVENT_FILE_LOG_LEVEL`, `KISEVENT_APP_DIR`
+- 로그 — `backend/core/logging.py`(loguru). 파일은 `%LOCALAPPDATA%\kisevent\logs\app.log`(macOS `~/Library/Application Support/kisevent/logs/`), 10MB 롤링 5개. 포맷 `시각 | 레벨 | ctx | 모듈:줄 | 메시지`, ctx는 live/backfill/scheduler/mcp/api/boot/tiles. 테이블은 `events`·`event_images`(status: pending|summarized|failed|superseded)·`image_summary`·`scrape_runs` 넷. uvicorn·apscheduler·httpx 표준 로깅은 여기로 합류하고 httpx 요청·access 로그는 DEBUG. 환경변수 `KISEVENT_LOG_DIR`, `KISEVENT_LOG_LEVEL`, `KISEVENT_FILE_LOG_LEVEL`, `KISEVENT_APP_DIR`. 수집 쪽은 `SCRAPE_INTERVAL_MIN`(15), `BACKFILL_LIMIT`(100)
 - `docs/event-page-research.md` — 사이트 실측 리서치와 설계 결정
 - `SETUP.md` — 서빙 PC(Windows, 비개발자) 설치 절차. 에이전트가 그대로 수행한다
 - `.mcp.json` — Claude Code가 이 폴더에서 `kis-event`(HTTP `/mcp`)를 자동 인식하게 하는 설정
@@ -31,7 +31,7 @@ KIS Event: 한국투자증권 이벤트 공고(영업점·뱅키스 고객대상
 - 서버: `./run.sh`(macOS) / `run.bat`(Windows) / `uv run python -m backend.main` — 모두 `127.0.0.1:4000`
 - 즉시 스크랩 1회: `uv run python -m backend.core.scraper --mode live|backfill` (서버가 떠 있으면 대시보드 버튼이나 `POST /api/scrape?mode=`)
 - 테스트: `uv run pytest`
-- Claude Desktop 연결: `claude_desktop_config.json`에 `{"command": "uv", "args": ["--directory", "<레포 경로>", "run", "python", "-m", "backend.mcp.stdio"]}`. HTTP 커넥터를 받으면 `http://localhost:4000/mcp`도 된다
+- Claude Desktop 연결: `claude_desktop_config.json`에 `{"command": "uv", "args": ["--directory", "<레포 경로>", "run", "python", "-m", "backend.mcp.stdio"]}`(Desktop은 PATH를 못 볼 수 있으니 `command`는 `uv` 절대경로가 안전하다 — SETUP.md 참고). HTTP 커넥터를 받으면 `http://localhost:4000/mcp`도 된다
 - Claude Code 연결: `claude mcp add --transport http kis-event http://localhost:4000/mcp`
 
 ## FronyBoard

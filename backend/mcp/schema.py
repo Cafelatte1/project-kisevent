@@ -48,6 +48,14 @@ class CriteriaV2(BaseModel):
     def _null_to_default(cls, v, info):
         return cls.model_fields[info.field_name].default if v is None else v
 
+    # 목록에 없는 상품명(CMA·발행어음 등)은 거부하지 않고 버린다 — text에 이미 원문이 있다.
+    @field_validator("products", mode="before")
+    @classmethod
+    def _drop_unknown_products(cls, v):
+        if isinstance(v, list):
+            return [p for p in v if p in Product.__args__]
+        return v
+
     @property
     def empty(self) -> bool:
         return not (self.text.strip() or self.products or self.performance)
@@ -64,7 +72,9 @@ class SummaryV2(BaseModel):
     @model_validator(mode="after")
     def _block_requires_target(self) -> "SummaryV2":
         if self.block_found and not self.target.text.strip():
-            raise ValueError("block_found가 true면 target.text가 필요합니다")
+            raise ValueError(
+                "block_found가 true면 target.text(참여대상 문구 원문, 예: 'BanKIS 주식계좌 보유 고객')가 필요합니다"
+            )
         # 세 필드가 다 비면 기준 없음으로 본다.
         if self.criteria is not None and self.criteria.empty:
             self.criteria = None
@@ -76,4 +86,5 @@ SUMMARY_GUIDE = """[schema_version 2 요약 안내]
 - analysis: 어떤 문구를 보고 기간·대상·기준을 판단했는지 2~5문장. 이 필드를 먼저 쓴다.
 - target.types: 영업점|뱅키스|연금 중 해당하는 것 전부(둘 다면 둘 다). 제목과 이미지 문구만으로 판단한다('BanKIS 주식계좌 보유 고객'→뱅키스, '영업점 개인고객'→영업점, 'DC·IRP·개인연금 계좌'→연금, '영업점, BanKIS 계좌 모두 가능'→영업점+뱅키스). 판단할 문구가 없으면 빈 배열. 해시태그·회색 소문·칩은 conditions와 exclusions로 나눈다.
 - criteria: 대상 상품/계좌/종목/시장·실적 인정·이미지에만 있는 부가 기간(자산유지·자격판정·대회 기간)·그 밖의 조건을 text 한 필드에 담고, products와 performance는 있을 때만 채운다. '참여조건' 라벨은 내용에 따라 자격→target.conditions, 절차·실적→criteria.performance, 상품→criteria.products. 아무것도 없으면 criteria는 null.
-- block_found: 기간·대상 블록을 찾았으면 true. 못 찾았으면 false로 저장하고 멈춘다."""
+- block_found: 기간·대상 블록을 찾았으면 true. 못 찾았으면 false로 저장하고 멈춘다.
+- 형식(키 이름 그대로): {"analysis": str, "target": {"types": [...], "text": str, "conditions": [str], "exclusions": [str]}, "criteria": {"text": str, "products": [str], "performance": str|null} | null, "block_found": bool}"""

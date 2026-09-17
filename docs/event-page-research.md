@@ -443,8 +443,8 @@ tiles.append((y, height))
 | 요약 입력 | 고정 크롭 y 1,200~3,600 1장(이미지가 짧으면 끝까지), JPEG q75. 20/20 블록이 [1,400, 3,450] 안이라 한 장으로 충분하고 2,400px 이하라 리사이즈 후에도 판독됨. 3,600을 넘는 정보는 버린다(보수적 수용) |
 | 호출 | `list_pending_summaries` → image_id마다 `get_summary_tiles(image_id)` → `save_summary(image_id, json)` |
 | 병렬 | Claude Code에서는 `.claude/agents/banner-summarizer.md`(Sonnet, 도구 2개)를 image_id마다 하나씩 띄운다. 서브에이전트가 없는 Claude Desktop은 같은 두 호출을 직접 순서대로 |
-| 유도 | MCP 서버 instructions와 `list_events`·`events_on` 설명문이 "미요약이면 먼저 요약"과 서브에이전트 사용을 명시. `events_on`은 표 첫 줄에 미요약 번호를 붙인다 |
-| 상태 | `pending → summarized`(v2 저장) → `analyzed`(v1까지 저장, 선택). 30분 claim으로 동시 호출 충돌 방지 |
+| 유도 | MCP 서버 instructions와 `list_events`·`events_on` 설명문이 "미요약이면 먼저 요약"과 서브에이전트 사용을 명시. `events_on`은 JSON `notice`에 미요약 번호를 담는다 |
+| 상태 | `pending → summarized`(v2 저장). 30분 claim으로 동시 호출 충돌 방지 |
 | 대상 필터 | `events.targets`(탭 기반) 폐기, `image_summary.target_types` 사용. 크롤링은 `CUSTGUBUN=00` 한 탭(00 = 01∪02, 00에만 있는 이벤트 없음을 진행중·지난 탭 모두에서 확인) |
 | 우선순위 | 진행중 이벤트 먼저, 그다음 `period_end` 내림차순 |
 

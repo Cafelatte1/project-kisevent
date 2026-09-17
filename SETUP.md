@@ -27,7 +27,7 @@ uv sync
 ## 3. 서버 자동 실행 등록
 서버 하나가 15분 주기 수집 + 대시보드 + MCP(HTTP)를 같이 띄운다. 로그온 시 창 없이 시작되도록 작업 스케줄러에 등록한다.
 ```powershell
-schtasks /Create /F /SC ONLOGON /TN "KISEvent" /TR "wscript.exe \"<REPO>\run-hidden.vbs\""
+schtasks /Create /F /SC ONLOGON /TN "KISEvent" /TR 'wscript.exe "<REPO>\run-hidden.vbs"'
 schtasks /Run /TN "KISEvent"
 ```
 30초 뒤 확인:

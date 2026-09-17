@@ -80,3 +80,11 @@ def test_all_empty_criteria_becomes_none():
         {"analysis": "a", "target": {"text": "뱅키스 고객"}, "criteria": {"text": None, "products": None}, "block_found": True}
     )
     assert s.criteria is None
+
+
+def test_unknown_products_are_dropped_not_rejected():
+    s = SummaryV2.model_validate(
+        {"analysis": "a", "target": {"text": "영업점 고객"},
+         "criteria": {"text": "발행어음", "products": ["발행어음", "채권", "CMA"]}, "block_found": True}
+    )
+    assert s.criteria.products == ["채권"]
