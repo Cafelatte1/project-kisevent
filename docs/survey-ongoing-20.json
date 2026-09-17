@@ -1,0 +1,322 @@
+[
+ {
+  "num": "6780", "title": "한가위 자산 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1750, "end_y": 2380, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": "대상계좌 / 대상상품 (칩)", "location": "first_section"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-16", "end": "2026-09-30"}],
+   "target": {"text": "영업점 개인고객", "account_types": ["영업점"], "conditions": ["이벤트 신청", "마케팅 동의 필수"], "exclusions": ["뱅키스 계좌", "해외투자영업부계좌"], "evidence": "참여대상: 영업점 개인고객 #뱅키스 계좌 #해외투자영업부계좌 제외"},
+   "criteria": {"text": "금융상품계좌(21) / CMA, 펀드(MMF 포함), 채권, ELS, RP(기간물·수시물), 발행어음, MMW, 랩, IMA (원화/외화, 해외채권 포함)", "accounts": ["금융상품계좌(21)"], "products": ["CMA", "펀드", "채권", "ELS", "RP", "발행어음", "MMW", "랩", "IMA"], "performance": "타사이체 채권 순입고 1천만원 이상 포함 시 추첨권 1매 추가 (추첨형)"}
+  },
+  "anomalies": "scope는 블록이 아니라 첫 섹션 칩에 있음. 실적 기준 라벨 없음(추첨형)."
+ },
+ {
+  "num": "6779", "title": "국내주식 THE 한투로 모아 이벤트", "template": "A",
+  "block": {"found": true, "start_y": 1700, "end_y": 2300, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": "혜택 (라벨 없는 설명문)", "location": "first_section"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-14", "end": "2026-09-30"}],
+   "target": {"text": "영업점 개인고객", "account_types": ["영업점"], "conditions": [], "exclusions": ["뱅키스 계좌", "해외투자영업부계좌"], "evidence": "참여대상: 영업점 개인고객 (뱅키스 계좌, 해외투자영업부계좌 제외)"},
+   "criteria": {"text": "국내주식 타사→당사 입고 실적 합산, 금액 구간별 신세계 모바일 상품권 (ETF&ETN 포함)", "accounts": [], "products": ["국내주식", "ETF", "ETN"], "performance": "기간 내 타사 입고 완료 실적 합산"}
+  },
+  "anomalies": "첫 섹션(~3600)에 '대상/혜택' 칩이 블록 내용을 반복. 실적 인정 라벨 없이 문장으로만 기술."
+ },
+ {
+  "num": "6778", "title": "국내주식 애프터마켓 거래 활성화 이벤트", "template": "A",
+  "block": {"found": true, "start_y": 1400, "end_y": 2380, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "대상 고객", "location": "block"},
+   "scope": {"text": "대상 계좌 / 대상 시장", "location": "block"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-14", "end": "2026-09-30"}],
+   "target": {"text": "영업점 개인 고객", "account_types": ["영업점"], "conditions": [], "exclusions": ["뱅키스", "해외투자영업부계좌"], "evidence": "대상 고객: 영업점 개인 고객 / 대상 계좌: 위탁계좌(01) (뱅키스, 해외투자영업부계좌 제외)"},
+   "criteria": {"text": "위탁계좌(01), KRX 애프터마켓(16시~20시)", "accounts": ["위탁계좌(01)"], "products": ["KRX 애프터마켓"], "performance": "이벤트01: 위탁계좌 최초 신규 개설 & 애프터마켓 거래금액 합산 100만원 이상 (선착순 500명)"}
+  },
+  "anomalies": "카드형이 아닌 구분선 리스트형 블록. '대상 시장' 라벨(시간대 16~20시)은 v2 필드에 없음. 블록 시작이 가장 이름(1400)."
+ },
+ {
+  "num": "6772", "title": "7회 실전투자대회 한투배틀", "template": "C",
+  "block": {"found": true, "start_y": 1800, "end_y": 2900, "complete": true},
+  "labels": {
+   "period": {"text": "참가 신청 / 대회 기간", "location": "block"},
+   "target": {"text": "참가 대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-07", "end": "2026-09-30"}, {"type": "대회", "start": "2026-09-07", "end": "2026-10-02"}],
+   "target": {"text": "BanKIS 계좌 보유고객", "account_types": ["뱅키스"], "conditions": ["리그별 1인 1계좌만 신청 가능"], "exclusions": ["영업점 및 임직원 계좌", "해외투자 영업부 계좌", "미니스탁 계좌", "ISA 중개형 계좌"], "evidence": "참가 대상: BanKIS 계좌 보유고객"},
+   "criteria": {"text": "국내주식 5개 리그 (대회 상금 안내)", "accounts": [], "products": ["국내주식"], "performance": null}
+  },
+  "anomalies": "기간 라벨이 '참가 신청'/'대회 기간' 두 카드. 제외 항목이 칩 형태."
+ },
+ {
+  "num": "6766", "title": "국내 주식선물 달러선물 신규 및 휴면 고객 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1700, "end_y": 2400, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-07", "end": "2026-10-30"}],
+   "target": {"text": "BanKIS 국내선물옵션 계좌 보유 고객 중 이벤트 신청고객", "account_types": ["뱅키스"], "conditions": ["26.4.1~8.31 국내 주식선물&미국달러선물 무거래 고객", "이벤트 신청 필수", "혜택 1~2 포상 중복가능"], "exclusions": ["영업점계좌"], "evidence": "참여대상: BanKIS 국내선물옵션 계좌 보유 고객 #영업점계좌 제외"},
+   "criteria": {"text": "국내 주식선물 & 미국달러선물", "accounts": ["국내선물옵션 계좌"], "products": ["주식선물", "미국달러선물"], "performance": "혜택1: 1억원 이상 거래 시 아메리카노 (선착순 1,000명)"}
+  },
+  "anomalies": "자격 판정 기간(26.4.1~8.31 무거래)이 참여대상 안에 조건문으로 존재 — periods 타입으로 담을 수 없음. 히어로 말풍선에도 같은 기간 표기."
+ },
+ {
+  "num": "6765", "title": "국내 선물옵션 신규및 휴면 고객 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1700, "end_y": 2450, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-07", "end": "2026-11-05"}],
+   "target": {"text": "BanKIS 국내선물옵션 신규 및 휴면 고객 중 이벤트 신청 고객", "account_types": ["뱅키스"], "conditions": ["26.4.1~8.31 무거래 고객", "이벤트 신청 필수", "혜택 1~2 포상 중복가능 (국내선물·국내옵션 간 중복 불가)"], "exclusions": ["영업점계좌"], "evidence": "참여대상: BanKIS 국내선물옵션 신규 및 휴면 고객 #영업점계좌 제외"},
+   "criteria": {"text": "국내선물옵션", "accounts": ["국내선물옵션 계좌"], "products": ["국내선물", "국내옵션"], "performance": null}
+  },
+  "anomalies": "블록 직후 '필요 이수 시간' 표(투자성향/사전교육/모의거래)가 붙어 있어 블록 경계 판단이 어려움. 자격 기간이 참여대상 조건에 내장."
+ },
+ {
+  "num": "6777", "title": "THE ELS SPOT 이벤트", "template": "A",
+  "block": {"found": true, "start_y": 1750, "end_y": 2400, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": "대상 계좌", "location": "first_section"},
+   "performance": {"text": "혜택 (라벨 없는 설명문)", "location": "first_section"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-03", "end": "2026-09-30"}],
+   "target": {"text": "영업점 개인고객", "account_types": ["영업점"], "conditions": [], "exclusions": ["뱅키스 계좌", "해외투자영업부계좌"], "evidence": "참여대상: 영업점 개인고객 #뱅키스 계좌, 해외투자영업부계좌 제외"},
+   "criteria": {"text": "위탁계좌(01), 금융상품계좌(21), ISA중개형 계좌 (Wrap 제외) / SPOT 회차 ELS 가입", "accounts": ["위탁계좌(01)", "금융상품계좌(21)", "ISA중개형"], "products": ["ELS (SPOT 회차)"], "performance": "배정 금액 구간별 경품 추첨"}
+  },
+  "anomalies": "기간 카드와 참여대상 카드가 타일 경계(2037)에 걸쳐 분리. 경품 구간표가 첫 섹션에 있음."
+ },
+ {
+  "num": "6771", "title": "국내주식 거래하면 최대 100만원 축하금 지급", "template": "B",
+  "block": {"found": true, "start_y": 1750, "end_y": 2700, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": "참여조건", "location": "block"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-01", "end": "2026-10-30"}],
+   "target": {"text": "뱅키스 주식계좌 보유 고객", "account_types": ["뱅키스"], "conditions": ["이벤트 신청 필수", "26년 7월~8월 21일 국내주식 거래금액 5천만원 이하 (무거래 제외)"], "exclusions": ["영업점 계좌"], "evidence": "참여대상: 뱅키스 주식계좌 보유 고객 #영업점 계좌 제외"},
+   "criteria": {"text": "국내주식 (ETF 거래금액 인정)", "accounts": [], "products": ["국내주식", "ETF"], "performance": "주간 단위 조건 충족 시 매주 추첨"}
+  },
+  "anomalies": "이미지 제목('국내주식투자 거래 이벤트! 매주 혜택 기회!')이 목록 제목과 다름. '참여조건' 라벨이 실적 기준이 아니라 자격 조건(과거 거래금액 상한)."
+ },
+ {
+  "num": "6767", "title": "국내주식 자산입고 이벤트", "template": "C",
+  "block": {"found": true, "start_y": 1700, "end_y": 3450, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간 (신청: / 자산유지:)", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": "실적기준 › 대상 종목", "location": "block"},
+   "performance": {"text": "참여방법 / 실적기준", "location": "block"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-01", "end": "2026-10-30"}, {"type": "자산유지", "start": null, "end": "2026-11-30"}],
+   "target": {"text": "BanKIS 주식계좌(01) 보유 고객", "account_types": ["뱅키스"], "conditions": ["이벤트 신청", "마케팅 동의 필수"], "exclusions": ["영업점 계좌", "ISA", "RIA"], "evidence": "참여대상: BanKIS 주식계좌(01) 보유 고객 #영업점 계좌 제외 / 참여방법 ①뱅키스 위탁계좌로 신청 (ISA, RIA, 영업점 계좌 불가)"},
+   "criteria": {"text": "국내주식(KOSPI, KOSDAQ, K-OTC, 코넥스) ※ETF, ETN, ELW 제외", "accounts": ["위탁계좌(01)"], "products": ["국내주식"], "performance": "1천만원 이상 타사대체 순입고 + 1천만원 이상 국내주식 거래 체결 + 자산유지기간(~11/30)까지 순입고액 이상 유지; 순입고금액=(총 입고-총 출고), 순출금액만큼 감액"}
+  },
+  "anomalies": "4항목 풀 케이스. 기간 카드 안에 신청/자산유지 두 기간이 sub-라벨로. 참여방법(절차)와 실적기준(정의)이 별도 라벨."
+ },
+ {
+  "num": "6764", "title": "국내주식 애프터마켓 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1700, "end_y": 2700, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": "참여조건", "location": "block"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-01", "end": "2026-09-30"}],
+   "target": {"text": "뱅키스 주식계좌 보유고객", "account_types": ["뱅키스"], "conditions": ["이벤트 신청 필수"], "exclusions": ["영업점계좌"], "evidence": "참여대상: 뱅키스 주식계좌 보유고객 #영업점계좌 제외"},
+   "criteria": {"text": "애프터마켓 주식 매수 (거래가능시간 15:40~20:00)", "accounts": [], "products": ["애프터마켓 국내주식"], "performance": "매일 신청 → 지원금 수령(선착순 3,000명) → 애프터마켓 매수 (참여 절차)"}
+  },
+  "anomalies": "'참여조건' 라벨이 실적 기준이 아니라 1~4단계 참여 절차. 6771과 같은 라벨·다른 의미."
+ },
+ {
+  "num": "6518", "title": "우리아이 첫 투자 한국투자증권과 함께!", "template": "D",
+  "block": {"found": true, "start_y": 1700, "end_y": 2300, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-01", "end": "2026-10-31"}],
+   "target": {"text": "만 19세 미만 BanKIS 01 주식계좌 최초 신규 고객", "account_types": ["뱅키스"], "conditions": ["만 19세 미만", "최초 신규", "이벤트 신청 필수", "마케팅 동의 필수"], "exclusions": ["영업점계좌"], "evidence": "참여대상: 만 19세 미만 BanKIS 01 주식계좌 최초 신규 고객 #영업점계좌 제외"},
+   "criteria": {"text": "BanKIS 01 주식계좌 신규 개설", "accounts": ["01 주식계좌"], "products": [], "performance": "개설 시 1+1 주식지급, 투자지원금 2만원"}
+  },
+  "anomalies": "블록 뒤 '알아보아요!' 안내 섹션. scope/performance 없음(계좌개설형)."
+ },
+ {
+  "num": "2432", "title": "BanKIS 신규 계좌개설 이벤트", "template": "D",
+  "block": {"found": true, "start_y": 1700, "end_y": 2300, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-09-01", "end": "2026-10-31"}],
+   "target": {"text": "BanKIS 01 주식계좌 최초 신규 고객", "account_types": ["뱅키스"], "conditions": ["최초 신규", "이벤트 신청 필수", "마케팅 동의 필수"], "exclusions": ["영업점계좌"], "evidence": "참여대상: BanKIS 01 주식계좌 최초 신규 고객 #영업점계좌 제외"},
+   "criteria": {"text": "BanKIS 01 주식계좌 신규 개설", "accounts": ["01 주식계좌"], "products": [], "performance": "혜택01: KOSPI 200 종목 중 추첨 1+1주 지급 (추첨일 제외 5영업일 내)"}
+  },
+  "anomalies": "6518과 동일 구조. 지급일 정보가 첫 섹션 박스에 있음(지급 period 후보)."
+ },
+ {
+  "num": "6763", "title": "Open API Rest API 유량확대 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1750, "end_y": 3450, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "이벤트 대상", "location": "block"},
+   "scope": {"text": "대상 상품", "location": "block"},
+   "performance": {"text": "실적 인정", "location": "block"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-31", "end": "2026-10-30"}],
+   "target": {"text": "BanKIS 01 or 03 정상 계좌 보유 & KIS Developers 서비스 가입 고객", "account_types": ["뱅키스"], "conditions": ["KIS Developers 서비스 가입"], "exclusions": ["영업점 계좌"], "evidence": "이벤트 대상: BanKIS 01 or 03 정상 계좌 보유 (영업점 계좌 제외)"},
+   "criteria": {"text": "국내주식 KOSPI·KOSDAQ 상장종목 (ETF, ETN 포함, ELW 제외) / 국내파생 지수·주식선물옵션, 상품선물", "accounts": ["BanKIS 01", "BanKIS 03"], "products": ["국내주식", "ETF", "ETN", "국내파생"], "performance": "BanKIS 01/03 계좌 거래만 인정 (중복 보유 계좌 실적 합산), KIS Developers 거래만 인정, 신청일~10.30 체결분"}
+  },
+  "anomalies": "라벨이 사용자 명명과 정확히 일치(이벤트 대상/대상 상품/실적 인정). 실적 인정 기간이 '신청일부터'로 개인별 가변."
+ },
+ {
+  "num": "6762", "title": "OpenAPI 신규 고객 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1750, "end_y": 3450, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "이벤트 대상", "location": "block"},
+   "scope": {"text": "대상 상품", "location": "block"},
+   "performance": {"text": "실적 인정", "location": "block"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-31", "end": "2026-10-30"}],
+   "target": {"text": "BanKIS 01 or 03 정상 계좌 보유 & KIS Developers 서비스 가입 고객", "account_types": ["뱅키스"], "conditions": ["KIS Developers 서비스 가입", "2026.6.1~8.27 KIS Developers 국내주식/국내파생 無거래 (BanKIS/영업점 포함)"], "exclusions": ["영업점 계좌"], "evidence": "이벤트 대상: BanKIS 01 or 03 정상 계좌 보유 (영업점 계좌 제외)"},
+   "criteria": {"text": "6763과 동일", "accounts": ["BanKIS 01", "BanKIS 03"], "products": ["국내주식", "ETF", "ETN", "국내파생"], "performance": "6763과 동일"}
+  },
+  "anomalies": "6763과 블록 동일, 無거래 자격 기간(6.1~8.27)만 추가 — 자격 기간을 periods로 담을 수 없음."
+ },
+ {
+  "num": "6759", "title": "뱅키스 ELS/ELB 가입 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1700, "end_y": 2320, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": null, "location": "absent"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-21", "end": "2026-10-31"}],
+   "target": {"text": "BanKIS 계좌 보유고객", "account_types": ["뱅키스"], "conditions": ["이벤트 신청 필수"], "exclusions": ["영업점계좌"], "evidence": "참여대상: BanKIS 계좌 보유고객 #영업점계좌 제외"},
+   "criteria": {"text": "ELS/ELB 가입 (히어로: ISA 중개형에서 시작하면 최대 40만원)", "accounts": ["ISA 중개형 (히어로 언급)"], "products": ["ELS", "ELB"], "performance": "첫 거래: 100만원 이상 가입 시 현금 5만원 (조건충족 시 전원)"}
+  },
+  "anomalies": "ISA 중개형 계좌 조건이 히어로 부제에만 있고 블록에는 없음. 블록 뒤 '첫 거래 이벤트' 섹션."
+ },
+ {
+  "num": "6757", "title": "뱅키스 금융 드림팀 이벤트 시즌2", "template": "B",
+  "block": {"found": true, "start_y": 1700, "end_y": 2350, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": "이벤트 대상상품 :", "location": "first_section"},
+   "performance": {"text": "히어로 그래픽 (EARLY 8/31 입금 혜택 1.5배 / FINAL 9/30 최종 잔고 판정)", "location": "first_section"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-19", "end": "2026-09-30"}],
+   "target": {"text": "영업점 계좌가 없는 뱅키스 고객", "account_types": ["뱅키스"], "conditions": [], "exclusions": ["영업점 계좌 보유자"], "evidence": "참여대상: 영업점 계좌가 없는 뱅키스 고객"},
+   "criteria": {"text": "CMA, RP, 발행어음, MMF, 펀드, ELS, 랩, 채권, IMA (원화·외화, 해외채권 포함)", "accounts": [], "products": ["CMA", "RP", "발행어음", "MMF", "펀드", "ELS", "랩", "채권", "IMA"], "performance": "8.31 순증 기준 입금 혜택 1.5배, 9.30 최종 잔고 판정 (순증 5천만원 이상 구간)"}
+  },
+  "anomalies": "2단계 판정일(8/31 EARLY, 9/30 FINAL)이 히어로 그래픽에만 있음 — 지급/판정 period로 담기 애매. 이미지 기간 8.19 vs 목록 8.18 불일치. 대상상품이 블록 밖 문장 라벨."
+ },
+ {
+  "num": "6754", "title": "DC & IRP 연금 이전 이벤트", "template": "C",
+  "block": {"found": true, "start_y": 1700, "end_y": 2375, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": "각주 (현물이전·현금이전 모두 가능 / 기간 내 순 입금액(입금-출금) 기준)", "location": "first_section"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-10", "end": "2026-09-30"}],
+   "target": {"text": "DC, IRP 계좌 보유고객", "account_types": ["연금"], "conditions": ["마케팅 동의 필수", "조건 충족 시 이벤트 자동 참여"], "exclusions": [], "evidence": "참여대상: DC, IRP 계좌 보유고객"},
+   "criteria": {"text": "타사 연금 이전 (DC, IRP)", "accounts": ["DC", "IRP"], "products": [], "performance": "타사 연금 1원 이상 이전 시 상품권 3종 택1 (3만원); 기간 내 순 입금액(입금-출금) 기준, 현물·현금이전 모두"}
+  },
+  "anomalies": "뱅키스/영업점 언급 없음 → 연금. 신청 없이 '자동 참여'. 실적 기준이 첫 섹션 각주 불릿."
+ },
+ {
+  "num": "6753", "title": "주식모으기 이벤트 시즌2", "template": "C",
+  "block": {"found": true, "start_y": 1620, "end_y": 3290, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 신청 기간 / 이벤트 챌린지 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": "챌린지 내용 › 대상 :", "location": "block"},
+   "performance": {"text": "실적 조건", "location": "block"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-10", "end": "2026-10-08"}, {"type": "자산유지", "start": "2026-08-10", "end": "2026-10-31"}],
+   "target": {"text": "BanKIS 주식계좌(01) 보유 고객", "account_types": ["뱅키스"], "conditions": ["이벤트 신청", "마케팅 동의 필수"], "exclusions": ["영업점 계좌"], "evidence": "참여대상: BanKIS 주식계좌(01) 보유 고객 #영업점 계좌 제외"},
+   "criteria": {"text": "모으기 가능 종목 전체; 1.나를 위한 모으기 2.미성년자 용돈 받고 모으기 3.자녀+부모 함께 모으기", "accounts": ["주식계좌(01)"], "products": ["주식모으기 가능 종목 전체"], "performance": "신청 후 챌린지 기간 동안 모으기 조건 달성 후 유지 필수 (중단·해지 시 미인정)"}
+  },
+  "anomalies": "'챌린지 기간'은 신청|자산유지|대회|거래|지급 어디에도 정확히 맞지 않음(자산유지로 근사). 한 카드에 두 기간이 이모지 sub-라벨로. 목록 종료일(10.08)은 신청 기간."
+ },
+ {
+  "num": "6751", "title": "뱅키스 국내채권 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1750, "end_y": 2825, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": "참여조건 (상품 범위)", "location": "block"},
+   "performance": {"text": "참여조건", "location": "block"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-03", "end": "2026-09-30"}],
+   "target": {"text": "뱅키스 CMA 계좌로 장외채권 매수한 고객", "account_types": ["뱅키스"], "conditions": ["이벤트 신청은 필수"], "exclusions": ["뱅키스 CMA(21번) 이외 계좌 모두"], "evidence": "참여대상: 뱅키스 CMA 계좌로 장외채권 매수한 고객 #뱅키스 CMA(21번)이외 계좌 모두 제외"},
+   "criteria": {"text": "국내 장외채권 매수 (장내채권, 전단채, CD/CP 제외)", "accounts": ["뱅키스 CMA(21)"], "products": ["국내 장외채권"], "performance": "조건 충족 시 구간별 신세계 모바일 상품권 최대 5만원 (전원 100%)"}
+  },
+  "anomalies": "기간 표기에 요일·연도 없음(26.8.3 ~ 9.30). '참여조건'이 scope(상품 범위)와 performance를 겸함. 히어로 'Again' 배지."
+ },
+ {
+  "num": "6745", "title": "뱅키스 ISA중개형 이벤트", "template": "B",
+  "block": {"found": true, "start_y": 1700, "end_y": 2275, "complete": true},
+  "labels": {
+   "period": {"text": "이벤트 기간", "location": "block"},
+   "target": {"text": "참여대상", "location": "block"},
+   "scope": {"text": null, "location": "absent"},
+   "performance": {"text": "각주 (2026.10.31 순입금 유지 고객 대상)", "location": "first_section"}
+  },
+  "values": {
+   "periods": [{"type": "신청", "start": "2026-08-01", "end": "2026-09-30"}, {"type": "자산유지", "start": null, "end": "2026-10-31"}],
+   "target": {"text": "BanKIS ISA중개형 계좌 보유고객", "account_types": ["뱅키스"], "conditions": ["이벤트 신청 필수"], "exclusions": ["영업점계좌"], "evidence": "참여대상: BanKIS ISA중개형 계좌 보유고객 #영업점계좌 제외"},
+   "criteria": {"text": "ISA중개형 계좌 순입금", "accounts": ["ISA중개형"], "products": [], "performance": "이벤트1: 순입금 1,000만원 이상 50명 추첨 (달항아리); 이벤트 2,3,4 중복 지급 가능; 10.31 순입금 유지"}
+  },
+  "anomalies": "자산유지 종료일이 첫 섹션 각주에만 있음. 이벤트 1~4 다중 구조(신규+기존 / 최초신규 배지)."
+ }
+]
