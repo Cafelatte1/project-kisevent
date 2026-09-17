@@ -1,7 +1,5 @@
 """대시보드가 쓰는 REST."""
 
-import json
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -29,25 +27,23 @@ def health() -> dict:
 def stats() -> dict:
     conn = db.connect()
     try:
-        by_target = {"영업점": 0, "뱅키스": 0}
-        events_active = 0
-        for row in conn.execute("SELECT targets FROM events WHERE state = 'ongoing'"):
-            events_active += 1
-            for target in json.loads(row["targets"]):
-                if target in by_target:
-                    by_target[target] += 1
-
+        events_active = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE state = 'ongoing'"
+        ).fetchone()[0]
         events_ended = conn.execute(
             "SELECT COUNT(*) FROM events WHERE state = 'ended'"
         ).fetchone()[0]
         runs = queries.recent_runs(conn, 1)
         status = crawl.snapshot()
 
+        images = queries.image_status_counts(conn)
+        images["pending_summaries"] = queries.pending_summaries(conn)
+
         return {
             "events_active": events_active,
             "events_ended": events_ended,
-            "by_target": by_target,
-            "images": queries.image_status_counts(conn),
+            "by_target": queries.by_target(conn),
+            "images": images,
             "new_last_24h": queries.new_events_since(conn, 24),
             "last_run": runs[0] if runs else None,
             "next_run_at": status["next_run_at"],

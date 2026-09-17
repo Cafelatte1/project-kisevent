@@ -10,9 +10,12 @@ from backend.core.tiles import (
     BLANK_THRESHOLD,
     FALLBACK_OVERLAP,
     MAX_TILE,
+    SUMMARY_Y0,
+    SUMMARY_Y1,
     TARGET,
     _row_scores,
     plan_tiles,
+    summary_crop,
 )
 
 
@@ -57,3 +60,21 @@ def test_cut_lands_on_blank_band(tmp_path):
     assert 1960 <= tiles[0][1] <= 2060
     assert 3960 <= tiles[1][1] <= 4060
     assert all(overlap == 0 for _, _, overlap in tiles)
+
+
+def test_summary_crop_on_real_banner():
+    banner = _largest_banner()
+    if banner is None:
+        pytest.skip("data/images 에 배너가 없다")
+
+    assert summary_crop(str(banner)) == (SUMMARY_Y0, SUMMARY_Y1)
+
+
+def test_summary_crop_on_short_images(tmp_path):
+    def _save(height: int):
+        path = tmp_path / f"short_{height}.png"
+        Image.fromarray(np.full((height, 1120), 255, dtype=np.uint8), mode="L").save(path)
+        return str(path)
+
+    assert summary_crop(_save(3000)) == (600, 3000)
+    assert summary_crop(_save(2000)) == (0, 2000)

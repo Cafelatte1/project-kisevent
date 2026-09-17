@@ -11,6 +11,8 @@ MAX_TILE = 2400
 BAND = 20
 BLANK_THRESHOLD = 2.0
 FALLBACK_OVERLAP = 150
+SUMMARY_Y0 = 1200
+SUMMARY_Y1 = 3600
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -58,12 +60,20 @@ def plan_tiles(image_path: str) -> list[tuple[int, int, int]]:
     return tiles
 
 
-def render_tile(image_path: str, y0: int, y1: int) -> bytes:
+def summary_crop(image_path: str) -> tuple[int, int]:
+    """요약용 고정 크롭(y0, y1). 정보 블록은 배너 상단 1,200~3,600px에 있다(§7.4)."""
+    with Image.open(image_path) as image:
+        height = image.height
+
+    return min(SUMMARY_Y0, max(0, height - MAX_TILE)), min(SUMMARY_Y1, height)
+
+
+def render_tile(image_path: str, y0: int, y1: int, quality: int = 80) -> bytes:
     with Image.open(image_path) as image:
         tile = image.convert("RGB").crop((0, y0, image.width, y1))
 
     buffer = io.BytesIO()
-    tile.save(buffer, format="JPEG", quality=80)
+    tile.save(buffer, format="JPEG", quality=quality)
     return buffer.getvalue()
 
 

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS event_images (
   sha256 TEXT NOT NULL,
   tile_count INTEGER,
   status TEXT NOT NULL DEFAULT 'pending',
+  summary_claimed_at TEXT,
   created_at TEXT NOT NULL,
   UNIQUE(event_num, url)
 );
@@ -53,6 +54,14 @@ CREATE TABLE IF NOT EXISTS image_tiles (
   text TEXT,
   transcribed_at TEXT,
   PRIMARY KEY(image_id, idx)
+);
+
+CREATE TABLE IF NOT EXISTS image_summary (
+  image_id INTEGER PRIMARY KEY REFERENCES event_images(id),
+  schema_version INTEGER NOT NULL,
+  json TEXT NOT NULL,
+  target_types TEXT NOT NULL,
+  summarized_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS image_analysis (
@@ -78,6 +87,9 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
 """
 
 ADDED_COLUMNS = {
+    "event_images": {
+        "summary_claimed_at": "TEXT",
+    },
     "events": {
         "state": "TEXT NOT NULL DEFAULT 'ongoing'",
         "seen_tab": "TEXT NOT NULL DEFAULT 'i'",

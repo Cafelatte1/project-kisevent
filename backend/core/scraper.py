@@ -18,7 +18,7 @@ from backend.core import db
 
 BASE_URL = "https://securities.koreainvestment.com/main/customer/notice/Event.jsp"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
-TABS = {"01": "영업점", "02": "뱅키스"}
+TABS = {"00": "전체"}
 # 진행중 탭(i)과 지난 이벤트 탭(t)
 LIST_TAB = {"live": "i", "backfill": "t"}
 BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "365"))  # 0이면 지난 이벤트 탭 전체
@@ -200,7 +200,6 @@ def _merge_lists(lists: dict[str, list[dict]]) -> list[dict]:
 
 
 def _upsert_event(conn, event: dict, now: str) -> str:
-    targets = json.dumps([TABS[code] for code in event["codes"]], ensure_ascii=False)
     row = conn.execute(
         "SELECT title, summary, period_start, period_end, thumbnail_url FROM events WHERE num = ?",
         (event["num"],),
@@ -209,7 +208,7 @@ def _upsert_event(conn, event: dict, now: str) -> str:
     if row is None:
         conn.execute(
             "INSERT INTO events (num, title, summary, period_start, period_end, thumbnail_url, targets,"
-            " first_seen_at, last_seen_at, state, seen_tab) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ongoing', 'i')",
+            " first_seen_at, last_seen_at, state, seen_tab) VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, 'ongoing', 'i')",
             (
                 event["num"],
                 event["title"],
@@ -217,7 +216,6 @@ def _upsert_event(conn, event: dict, now: str) -> str:
                 event["period_start"],
                 event["period_end"],
                 event["thumbnail_url"],
-                targets,
                 now,
                 now,
             ),
@@ -230,14 +228,13 @@ def _upsert_event(conn, event: dict, now: str) -> str:
     )
     conn.execute(
         "UPDATE events SET title = ?, summary = ?, period_start = ?, period_end = ?, thumbnail_url = ?,"
-        " targets = ?, last_seen_at = ?, state = 'ongoing', seen_tab = 'i' WHERE num = ?",
+        " last_seen_at = ?, state = 'ongoing', seen_tab = 'i' WHERE num = ?",
         (
             event["title"],
             event["summary"],
             event["period_start"],
             event["period_end"],
             event["thumbnail_url"],
-            targets,
             now,
             event["num"],
         ),
@@ -253,14 +250,13 @@ def _mark_ended(conn, seen: set[str]) -> None:
 
 
 def _backfill_event(conn, event: dict, now: str) -> str:
-    """지난 이벤트 탭에서 본 이벤트. 이미 있으면 targets만 합치고 state는 내리지 않는다."""
-    labels = [TABS[code] for code in event["codes"]]
-    row = conn.execute("SELECT targets FROM events WHERE num = ?", (event["num"],)).fetchone()
+    """지난 이벤트 탭에서 본 이벤트. 이미 있으면 마지막으로 본 시각만 갱신하고 state는 내리지 않는다."""
+    row = conn.execute("SELECT 1 FROM events WHERE num = ?", (event["num"],)).fetchone()
 
     if row is None:
         conn.execute(
             "INSERT INTO events (num, title, summary, period_start, period_end, thumbnail_url, targets,"
-            " first_seen_at, last_seen_at, state, seen_tab) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ended', 't')",
+            " first_seen_at, last_seen_at, state, seen_tab) VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, 'ended', 't')",
             (
                 event["num"],
                 event["title"],
@@ -268,19 +264,14 @@ def _backfill_event(conn, event: dict, now: str) -> str:
                 event["period_start"],
                 event["period_end"],
                 event["thumbnail_url"],
-                json.dumps(labels, ensure_ascii=False),
                 now,
                 now,
             ),
         )
         return "new"
 
-    merged = set(json.loads(row["targets"])) | set(labels)
-    targets = json.dumps([label for label in TABS.values() if label in merged], ensure_ascii=False)
-    conn.execute(
-        "UPDATE events SET targets = ?, last_seen_at = ? WHERE num = ?", (targets, now, event["num"])
-    )
-    return "updated" if targets != row["targets"] else "same"
+    conn.execute("UPDATE events SET last_seen_at = ? WHERE num = ?", (now, event["num"]))
+    return "same"
 
 
 def _needs_detail(conn, num: str, template: str | None) -> bool:

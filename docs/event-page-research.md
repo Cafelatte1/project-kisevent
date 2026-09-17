@@ -413,45 +413,37 @@ tiles.append((y, height))
 | 블록 직후 무관한 표 | 6765 필요 이수 시간 | 블록 끝을 정확히 자를 필요 없음 — 4,000px 고정 |
 
 ### 7.3 확정: 요약 추출 스키마 v2
-이미지 1장 = 상단 4,000px 타일 2~3장 = MCP 호출 1회. 전체 전사(§6)는 별도 2단계로 남긴다.
+이미지 1장 = 고정 크롭 1장(y 1,200~3,600) = MCP 호출 1회. 신청 기간은 목록에 있으므로 뽑지 않고, 필드는 추론 → 대상 → 기준 순서다. 전체 전사(§6)는 상세 질문용 2단계로 남긴다.
 ```json
 {
-  "title": "국내주식 자산입고 이벤트 한투로 가져오기",
-  "periods": [
-    {"type": "신청", "start": "2026-09-01", "end": "2026-10-30"},
-    {"type": "자산유지", "start": null, "end": "2026-11-30"}
-  ],
+  "analysis": "히어로 아래 정보 블록에 '이벤트 기간 2026.9.1~10.30'과 '참여대상 BanKIS 주식계좌(01) 보유 고객'이 있다. 대상 줄 밑 회색 소문에 '#영업점 계좌 제외'가 붙어 있어 대상은 뱅키스로 판단했다. 같은 블록의 '대상 종목'과 '실적 인정' 칸에 국내주식 범위와 순입고 산식이 적혀 있고, 자산유지 기한 11/30은 기간 줄 옆 괄호에 있다.",
   "target": {
+    "types": ["뱅키스"],
     "text": "BanKIS 주식계좌(01) 보유 고객",
-    "account_types": ["뱅키스"],
-    "evidence": "BanKIS 주식계좌(01) 보유 고객 / #영업점 계좌 제외",
-    "customer_types": ["전체"],
     "conditions": ["이벤트 신청", "마케팅 동의 필수"],
     "exclusions": ["영업점 계좌"]
   },
   "criteria": {
-    "text": "대상 종목 국내주식(KOSPI·KOSDAQ·K-OTC·코넥스, ETF·ETN·ELW 제외) / 순입고금액 = 기간 내 총입고-총출고, 순출금 감액",
-    "accounts": ["위탁계좌(01)"],
+    "text": "대상 종목 국내주식(KOSPI·KOSDAQ·K-OTC·코넥스, ETF·ETN·ELW 제외) / 순입고금액 = 기간 내 총입고-총출고, 순출금 감액 / 2026-11-30까지 자산유지",
     "products": ["국내주식"],
-    "performance": "1천만원 이상 타사대체 순입고 + 1천만원 이상 거래 + 11/30까지 자산유지",
-    "source": "block"
+    "performance": "1천만원 이상 타사대체 순입고 + 1천만원 이상 거래 + 11/30까지 자산유지"
   },
-  "notes": ["이미지 기간 표기 8.19 vs 목록 8.18"],
   "block_found": true
 }
 ```
-- `periods[].type`: 신청 | 자격판정 | 대회 | 자산유지 | 지급 — 필수 1개 이상, 목록 기간은 `신청`.
-- `target.account_types`: 영업점 | 뱅키스 | 연금 | 전체 | 미상 — **목록 탭이 아니라 제목·이미지 문구만으로** 판단하고 근거를 `evidence`에 남긴다. `customer_types`: 전체 | 신규 | 휴면 | 기존 | 미성년.
-- `criteria`: 상품/계좌/실적을 한 필드로. `text`가 본체이고 `accounts`·`products`·`performance`는 있을 때만. 없으면 `criteria: null`. `source`: block | first_section.
-- `products` 어휘는 v1과 같다(국내주식 | 해외주식 | 선물옵션 | ELS·ELB | 펀드 | 채권 | RP | ISA | 연금 | 계좌개설 | OpenAPI).
+(6767을 실제로 요약해 저장한 값.)
+- `analysis`: 어떤 문구를 보고 대상·기준을 판단했는지 2~5문장. 일부러 첫 필드에 두어 추론을 먼저 쓰게 한다.
+- `target.types`: 영업점 | 뱅키스 | 연금 중 해당하는 것 전부(둘 다면 둘 다, 판단 불가면 빈 배열 = 대시보드 "미상"). **목록 탭이 아니라 제목·이미지 문구만으로** 판단한다. 해시태그·회색 소문·칩은 `conditions`/`exclusions`.
+- `criteria`: "기타 등등" — 대상 상품/계좌/종목/시장, 실적 인정, 이미지에만 있는 부가 기간(자산유지·자격판정·대회)을 `text` 한 필드에. `products`(v1 어휘)·`performance`는 있을 때만. 없으면 `null`.
 - `block_found=false`면 v1 전체 전사 경로로 폴백.
 
 ### 7.4 파이프라인 결정
 | 항목 | 값 |
 |---|---|
-| 요약 타일 | `plan_tiles` 결과 중 `y0 < 4000`인 타일(2~3장), JPEG q75 |
-| 호출 | `get_summary_tiles(limit=1)` → 이미지 1장의 타일 전부 + 목록 메타(제목·기간) → `save_summary(image_id, json)` |
-| 상태 | `pending → summarized`(v2 저장) → `analyzed`(v1까지 저장, 선택) |
-| 대상 필터 | `events.targets`(탭 기반)를 버리고 `image_summary.account_types`를 쓴다. 크롤링은 `CUSTGUBUN=00` 하나 |
+| 요약 입력 | 고정 크롭 y 1,200~3,600 1장(이미지가 짧으면 끝까지), JPEG q75. 20/20 블록이 [1,400, 3,450] 안이라 한 장으로 충분하고 2,400px 이하라 리사이즈 후에도 판독됨. 3,600을 넘는 정보는 버린다(보수적 수용) |
+| 호출 | `list_pending_summaries` → image_id마다 `get_summary_tiles(image_id)` → `save_summary(image_id, json)` |
+| 병렬 | Claude Code에서는 `.claude/agents/banner-summarizer.md`(Sonnet, 도구 2개)를 image_id마다 하나씩 띄운다. 서브에이전트가 없는 Claude Desktop은 같은 두 호출을 직접 순서대로 |
+| 유도 | MCP 서버 instructions와 `list_events`·`events_on` 설명문이 "미요약이면 먼저 요약"과 서브에이전트 사용을 명시. `events_on`은 표 첫 줄에 미요약 번호를 붙인다 |
+| 상태 | `pending → summarized`(v2 저장) → `analyzed`(v1까지 저장, 선택). 30분 claim으로 동시 호출 충돌 방지 |
+| 대상 필터 | `events.targets`(탭 기반) 폐기, `image_summary.target_types` 사용. 크롤링은 `CUSTGUBUN=00` 한 탭(00 = 01∪02, 00에만 있는 이벤트 없음을 진행중·지난 탭 모두에서 확인) |
 | 우선순위 | 진행중 이벤트 먼저, 그다음 `period_end` 내림차순 |
-| 모델 | 4필드 요약은 Sonnet급으로 충분(라벨 읽기 + 짧은 구조화) |

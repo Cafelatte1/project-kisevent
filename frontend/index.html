@@ -125,12 +125,14 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .badge { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; color: var(--ink-2); }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
 .dot.analyzed { background: var(--good); }
+.dot.summarized { background: var(--good); }
 .dot.transcribed { background: var(--warning); }
 .dot.transcribing { background: var(--serious); }
 .dot.failed { background: var(--critical); }
 .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); margin-right: 4px; white-space: nowrap; }
 .tag.영업점 { border-color: var(--branch); color: var(--branch); }
 .tag.뱅키스 { border-color: var(--banki); color: var(--banki); }
+.tag.미상 { color: var(--muted); }
 
 #detail { margin: 18px 0 0; padding: 16px 18px; }
 #detail .head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
@@ -217,11 +219,11 @@ a { color: var(--branch); }
 
 <script>
 const STATUS_LABEL = {
-  pending: "분석 대기", transcribing: "전사 중", transcribed: "전사 완료",
+  pending: "분석 대기", summarized: "요약 완료", transcribing: "전사 중", transcribed: "전사 완료",
   analyzed: "분석 완료", failed: "실패",
 };
-const TARGETS = [["", "전체"], ["영업점", "영업점"], ["뱅키스", "뱅키스"]];
-const ANALYSIS = [["", "전체"], ["analyzed", "분석 완료"], ["pending", "미분석"]];
+const TARGETS = [["", "전체보기"], ["영업점", "영업점"], ["뱅키스", "뱅키스"], ["연금", "연금"], ["미상", "미상"]];
+const ANALYSIS = [["", "전체"], ["summarized", "요약 완료"], ["none", "미요약"]];
 const EVENT_STATES = [["ongoing", "진행중"], ["ended", "종료"], ["all", "전체"]];
 const STATE_LABEL = { ongoing: "진행중", ended: "종료" };
 const MODE_LABEL = { live: "라이브", backfill: "백필" };
@@ -272,9 +274,13 @@ function statusBadge(status) {
   return badge;
 }
 
-function targetTags(targets) {
+function targetTags(targetTypes) {
   const box = el("span");
-  targets.forEach((t) => box.append(el("span", `tag ${t}`, t)));
+  if (!targetTypes || !targetTypes.length) {
+    box.append(el("span", "tag 미상", "미상"));
+    return box;
+  }
+  targetTypes.forEach((t) => box.append(el("span", `tag ${t}`, t)));
   return box;
 }
 
@@ -294,13 +300,20 @@ function renderStats(stats) {
   const imgs = $("tiles-img");
   imgs.replaceChildren(
     ...Object.keys(STATUS_LABEL).map((key) => tile(STATUS_LABEL[key], stats.images[key] ?? 0)),
+    tile("요약 대기", stats.images.pending_summaries ?? 0),
   );
 }
 
+function matchesTarget(event) {
+  const types = event.target_types;
+  if (state.target === "미상") return !types || !types.length;
+  return !!types && types.includes(state.target);
+}
+
 function matches(event) {
-  if (state.target && !event.targets.includes(state.target)) return false;
-  if (state.analysis === "analyzed" && event.analysis_status !== "analyzed") return false;
-  if (state.analysis === "pending" && event.analysis_status === "analyzed") return false;
+  if (state.target && !matchesTarget(event)) return false;
+  if (state.analysis === "summarized" && event.summary_status === "none") return false;
+  if (state.analysis === "none" && event.summary_status !== "none") return false;
   return true;
 }
 
@@ -328,7 +341,7 @@ function renderEvents() {
     tr.append(title);
 
     const target = el("td");
-    target.append(targetTags(event.targets));
+    target.append(targetTags(event.target_types));
     tr.append(target);
 
     const evState = el("td");
@@ -466,6 +479,33 @@ function analysisNodes(analysis) {
   return nodes;
 }
 
+function summaryNodes(summary) {
+  const nodes = [];
+  if (summary.analysis) nodes.push(section("요약 근거", el("div", "kv", summary.analysis)));
+
+  const t = summary.target;
+  if (t) {
+    const box = el("div");
+    box.append(targetTags(t.types));
+    if (t.text) box.append(el("div", "kv", t.text));
+    if (t.conditions && t.conditions.length) box.append(bullets(t.conditions));
+    if (t.exclusions && t.exclusions.length) box.append(bullets(t.exclusions, "caveat"));
+    nodes.push(section("대상", box));
+  }
+
+  const c = summary.criteria;
+  if (c) {
+    const box = el("div");
+    box.append(el("div", "kv", c.text));
+    const chips = el("div");
+    (c.products || []).forEach((name) => chips.append(el("span", "tag", name)));
+    if (chips.childNodes.length) box.append(chips);
+    if (c.performance) box.append(el("div", "kv", `실적 인정: ${c.performance}`));
+    nodes.push(section("대상 상품·계좌", box));
+  }
+  return nodes;
+}
+
 function renderDetail(event) {
   const panel = $("detail");
   const head = el("div", "head");
@@ -473,7 +513,7 @@ function renderDetail(event) {
   left.append(el("h3", null, event.title));
   left.append(el("div", "sub", `${event.period_start || "—"} ~ ${event.period_end || "—"} · 템플릿 ${event.template || "—"} · No.${event.num}`));
   const tags = el("div", "sub");
-  tags.append(targetTags(event.targets));
+  tags.append(targetTags(event.summary && event.summary.target ? event.summary.target.types : null));
   left.append(tags);
 
   const close = el("button", null, "닫기");
@@ -481,8 +521,14 @@ function renderDetail(event) {
   head.append(left, close);
   panel.replaceChildren(head);
 
-  if (event.summary) panel.append(section("목록 요약", el("div", "kv", event.summary)));
+  if (event.list_summary) panel.append(section("목록 요약", el("div", "kv", event.list_summary)));
   if (event.actions && event.actions.length) panel.append(section("버튼", bullets(event.actions)));
+
+  if (event.summary) {
+    panel.append(...summaryNodes(event.summary));
+  } else {
+    panel.append(section("요약", el("div", "dim", "요약 전")));
+  }
 
   const image = event.image;
   if (!image) {

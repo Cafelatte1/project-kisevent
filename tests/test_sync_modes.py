@@ -49,8 +49,8 @@ def run(tmp_path, monkeypatch):
     monkeypatch.setattr(scraper.httpx, "Client", _FakeClient)
     seen_gubun: list[str] = []
 
-    def do(mode: str, items: list[dict] | dict[str, list[dict]]) -> dict:
-        by_code = items if isinstance(items, dict) else {"01": items}
+    def do(mode: str, items: list[dict]) -> dict:
+        by_code = {"00": items}
 
         def fake_fetch(client, code, gubun, stop_before=None, on_page=None):
             seen_gubun.append(gubun)
@@ -79,7 +79,7 @@ def test_live_ends_events_that_disappeared(run):
     conn = db.connect()
     assert _states(conn) == {"1": "ongoing", "2": "ended"}
     conn.close()
-    assert run.gubun == ["i", "i", "i", "i"]
+    assert run.gubun == ["i", "i"]
 
 
 def test_backfill_keeps_ongoing_and_adds_ended(run):
@@ -92,18 +92,9 @@ def test_backfill_keeps_ongoing_and_adds_ended(run):
     assert tabs == {"1": "i", "9": "t"}
     conn.close()
 
-    assert run.gubun[-2:] == ["t", "t"]
+    assert run.gubun[-1:] == ["t"]
     # 이미 상세를 받은 1은 건너뛰고, 새로 들어온 9만 지난 이벤트 탭으로 연다
     assert len(_FakeClient.detail_urls) == 1
     assert "num=9" in _FakeClient.detail_urls[0]
     assert "gubun=t" in _FakeClient.detail_urls[0]
-
-
-def test_backfill_merges_targets(run):
-    run("live", [_item("1")])
-    run("backfill", {"01": [_item("1")], "02": [_item("1")]})
-
-    conn = db.connect()
-    targets = conn.execute("SELECT targets FROM events WHERE num = '1'").fetchone()["targets"]
-    conn.close()
-    assert targets == '["영업점", "뱅키스"]'
+    assert "CUSTGUBUN=00" in _FakeClient.detail_urls[0]
