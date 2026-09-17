@@ -70,6 +70,11 @@ h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
 .bar .right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .state { font-size: 12px; color: var(--muted); }
 .state.err { color: var(--critical); }
+.pill {
+  font-size: 12px; color: var(--ink-2); background: var(--wash);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; white-space: nowrap;
+}
+.pill.live { color: var(--ink); border-color: var(--warning); }
 
 button {
   font: inherit; color: var(--ink); background: var(--surface);
@@ -169,8 +174,11 @@ a { color: var(--branch); }
       </div>
     </div>
     <div class="right">
+      <span class="pill" id="crawl-pill">대기</span>
+      <span class="state err" id="crawl-err"></span>
       <span class="state" id="state"></span>
-      <button id="scrape">지금 수집</button>
+      <button id="scrape-live">지금 동기화</button>
+      <button id="scrape-backfill">1년 백필</button>
     </div>
   </header>
 
@@ -180,16 +188,17 @@ a { color: var(--branch); }
   <h2>이벤트</h2>
   <div class="filters">
     <div class="group" id="f-target"><span>대상</span></div>
+    <div class="group" id="f-state"><span>상태</span></div>
     <div class="group" id="f-status"><span>분석</span></div>
     <span class="state" id="count"></span>
   </div>
   <div class="card scroll">
     <table>
       <thead><tr>
-        <th>제목</th><th>대상</th><th>기간</th><th class="hide-sm">템플릿</th>
+        <th>제목</th><th>대상</th><th>상태</th><th>기간</th><th class="hide-sm">템플릿</th>
         <th>분석</th><th class="hide-sm">요약</th>
       </tr></thead>
-      <tbody id="events"><tr><td colspan="6" class="empty">불러오는 중…</td></tr></tbody>
+      <tbody id="events"><tr><td colspan="7" class="empty">불러오는 중…</td></tr></tbody>
     </table>
   </div>
 
@@ -213,8 +222,14 @@ const STATUS_LABEL = {
 };
 const TARGETS = [["", "전체"], ["영업점", "영업점"], ["뱅키스", "뱅키스"]];
 const ANALYSIS = [["", "전체"], ["analyzed", "분석 완료"], ["pending", "미분석"]];
+const EVENT_STATES = [["ongoing", "진행중"], ["ended", "종료"], ["all", "전체"]];
+const STATE_LABEL = { ongoing: "진행중", ended: "종료" };
+const MODE_LABEL = { live: "라이브", backfill: "백필" };
 
-const state = { events: [], target: "", analysis: "", selected: null, busy: false };
+const state = {
+  events: [], target: "", analysis: "", eventState: "ongoing",
+  selected: null, crawl: null, lastClick: 0, lockUntil: 0,
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -270,6 +285,7 @@ function renderStats(stats) {
   const main = $("tiles-main");
   main.replaceChildren(
     tile("진행 중 이벤트", stats.events_active, true),
+    tile("종료 이벤트(1년)", stats.events_ended ?? 0),
     tile("영업점", stats.by_target["영업점"]),
     tile("뱅키스", stats.by_target["뱅키스"]),
     tile("24시간 신규", stats.new_last_24h),
@@ -296,7 +312,7 @@ function renderEvents() {
   if (!rows.length) {
     const tr = el("tr");
     const td = el("td", "empty", "조건에 맞는 이벤트가 없습니다");
-    td.colSpan = 6;
+    td.colSpan = 7;
     tr.append(td);
     body.replaceChildren(tr);
     return;
@@ -314,6 +330,10 @@ function renderEvents() {
     const target = el("td");
     target.append(targetTags(event.targets));
     tr.append(target);
+
+    const evState = el("td");
+    evState.append(el("span", "tag", STATE_LABEL[event.state] || event.state || "—"));
+    tr.append(evState);
 
     tr.append(el("td", "num dim", `${event.period_start || "—"} ~ ${event.period_end || "—"}`));
     tr.append(el("td", "hide-sm dim", event.template || "—"));
@@ -509,7 +529,7 @@ async function selectEvent(num) {
 }
 
 function buildFilters() {
-  const bind = (host, options, key) => {
+  const bind = (host, options, key, onChange) => {
     options.forEach(([value, label]) => {
       const chip = el("button", "chip", label);
       chip.setAttribute("aria-pressed", String(state[key] === value));
@@ -517,23 +537,65 @@ function buildFilters() {
         state[key] = value;
         host.querySelectorAll(".chip").forEach((node) => node.setAttribute("aria-pressed", "false"));
         chip.setAttribute("aria-pressed", "true");
-        renderEvents();
+        (onChange || renderEvents)();
       };
       host.append(chip);
     });
   };
   bind($("f-target"), TARGETS, "target");
+  bind($("f-state"), EVENT_STATES, "eventState", loadEvents);
   bind($("f-status"), ANALYSIS, "analysis");
+}
+
+function updateButtons() {
+  const running = state.crawl && state.crawl.state === "running";
+  const locked = Date.now() < state.lockUntil;
+  ["scrape-live", "scrape-backfill"].forEach((id) => { $(id).disabled = !!(running || locked); });
+}
+
+function renderCrawl(crawl) {
+  state.crawl = crawl;
+  const pill = $("crawl-pill");
+  if (crawl.state === "running") {
+    const mode = MODE_LABEL[crawl.mode] || crawl.mode || "";
+    pill.textContent = `${mode} 실행 중 · ${crawl.page}페이지 · ${crawl.events_seen}건`;
+    pill.classList.add("live");
+  } else {
+    const mode = MODE_LABEL[crawl.last_mode] || crawl.last_mode;
+    pill.textContent = mode
+      ? `대기 · 마지막 ${mode} ${fmtTime(crawl.last_finished_at)}`
+      : "대기";
+    pill.classList.remove("live");
+  }
+  $("crawl-err").textContent = crawl.last_error || "";
+  updateButtons();
+}
+
+async function pollCrawl() {
+  try {
+    const wasRunning = state.crawl && state.crawl.state === "running";
+    const crawl = await getJSON("/api/crawl/status");
+    renderCrawl(crawl);
+    if (wasRunning && crawl.state === "idle") await refresh();
+  } catch (err) {
+    setState(`상태 조회 실패: ${err.message}`, true);
+  }
+}
+
+async function loadEvents() {
+  const events = await getJSON(`/api/events?state=${encodeURIComponent(state.eventState)}`);
+  state.events = events.events;
+  renderEvents();
 }
 
 async function refresh() {
   try {
-    const [stats, events, runs] = await Promise.all([
-      getJSON("/api/stats"), getJSON("/api/events"), getJSON("/api/runs?limit=20"),
+    const [stats, runs] = await Promise.all([
+      getJSON("/api/stats"), getJSON("/api/runs?limit=20"),
     ]);
     renderStats(stats);
-    state.events = events.events;
-    renderEvents();
+    renderCrawl(stats.crawl);
+    await loadEvents();
     renderRuns(runs);
     setState(`갱신 ${fmtTime(new Date().toISOString())}`);
   } catch (err) {
@@ -541,30 +603,45 @@ async function refresh() {
   }
 }
 
-async function scrapeNow() {
-  if (state.busy) return;
-  state.busy = true;
-  $("scrape").disabled = true;
-  setState("수집 중…");
+async function scrapeNow(mode) {
+  const now = Date.now();
+  if (now - state.lastClick < 1000 || now < state.lockUntil) return;
+  state.lastClick = now;
+
   try {
-    const res = await fetch("/api/scrape", { method: "POST" });
+    const res = await fetch(`/api/scrape?mode=${mode}`, { method: "POST" });
     const body = await res.json();
-    if (!res.ok) throw new Error(body.error || res.status);
-    await refresh();
-    if (state.selected) await selectEvent(state.selected);
-    setState(`수집 완료: ${body.events}건`);
+
+    if (res.status === 202) {
+      renderCrawl({ ...(state.crawl || {}), state: "running", mode, page: 0, events_seen: 0, last_error: null });
+      setState(`${MODE_LABEL[mode] || mode} 시작`);
+      return;
+    }
+    if (res.status === 409) {
+      setState("이미 실행 중입니다", true);
+      await pollCrawl();
+      return;
+    }
+    if (res.status === 429) {
+      const secs = body.retry_after_sec || 60;
+      state.lockUntil = Date.now() + secs * 1000;
+      setState(`너무 잦습니다 · ${secs}초 뒤 다시 시도하세요`, true);
+      updateButtons();
+      setTimeout(updateButtons, secs * 1000);
+      return;
+    }
+    throw new Error(body.error || res.status);
   } catch (err) {
-    setState(`수집 실패: ${err.message}`, true);
-  } finally {
-    state.busy = false;
-    $("scrape").disabled = false;
+    setState(`요청 실패: ${err.message}`, true);
   }
 }
 
 buildFilters();
-$("scrape").onclick = scrapeNow;
+$("scrape-live").onclick = () => scrapeNow("live");
+$("scrape-backfill").onclick = () => scrapeNow("backfill");
 refresh();
-setInterval(() => { if (!state.busy) refresh(); }, 60000);
+setInterval(pollCrawl, 2000);
+setInterval(refresh, 60000);
 </script>
 </body>
 </html>

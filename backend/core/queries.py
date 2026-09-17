@@ -23,9 +23,11 @@ def transcript(conn, image_id: int) -> str:
     return "\n\n".join(row["text"] or "" for row in rows)
 
 
-def list_events(conn, target: str | None = None) -> dict:
+def list_events(conn, target: str | None = None, state: str = "ongoing") -> dict:
     events = []
-    for row in conn.execute("SELECT * FROM events WHERE active = 1 ORDER BY num DESC"):
+    where = "" if state == "all" else " WHERE state = ?"
+    params = () if state == "all" else (state,)
+    for row in conn.execute(f"SELECT * FROM events{where} ORDER BY num DESC", params):
         targets = json.loads(row["targets"])
         if target and target not in targets:
             continue
@@ -41,6 +43,7 @@ def list_events(conn, target: str | None = None) -> dict:
             {
                 "num": row["num"],
                 "title": row["title"],
+                "state": row["state"],
                 "targets": targets,
                 "period_start": row["period_start"],
                 "period_end": row["period_end"],
@@ -117,5 +120,5 @@ def recent_runs(conn, limit: int = 20) -> list[dict]:
 def new_events_since(conn, hours: int = 24) -> int:
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     return conn.execute(
-        "SELECT COUNT(*) FROM events WHERE active = 1 AND first_seen_at >= ?", (since,)
+        "SELECT COUNT(*) FROM events WHERE state = 'ongoing' AND first_seen_at >= ?", (since,)
     ).fetchone()[0]

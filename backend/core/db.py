@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS events (
   legacy_text TEXT,
   first_seen_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
-  active INTEGER NOT NULL DEFAULT 1
+  state TEXT NOT NULL DEFAULT 'ongoing',
+  seen_tab TEXT NOT NULL DEFAULT 'i'
 );
 
 CREATE TABLE IF NOT EXISTS event_images (
@@ -69,9 +70,24 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
   new_count INTEGER,
   updated_count INTEGER,
   image_count INTEGER,
-  error TEXT
+  error TEXT,
+  mode TEXT NOT NULL DEFAULT 'live',
+  pages INTEGER,
+  events_seen INTEGER
 );
 """
+
+ADDED_COLUMNS = {
+    "events": {
+        "state": "TEXT NOT NULL DEFAULT 'ongoing'",
+        "seen_tab": "TEXT NOT NULL DEFAULT 'i'",
+    },
+    "scrape_runs": {
+        "mode": "TEXT NOT NULL DEFAULT 'live'",
+        "pages": "INTEGER",
+        "events_seen": "INTEGER",
+    },
+}
 
 
 def connect() -> sqlite3.Connection:
@@ -82,6 +98,21 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+
+    for table, columns in ADDED_COLUMNS.items():
+        existing = _columns(conn, table)
+        for name, decl in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                if table == "events" and name == "state" and "active" in existing:
+                    conn.execute(
+                        "UPDATE events SET state = CASE WHEN active = 1 THEN 'ongoing' ELSE 'ended' END"
+                    )
+
     conn.commit()

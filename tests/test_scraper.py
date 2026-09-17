@@ -1,6 +1,8 @@
-"""네트워크 없이 파싱 함수만 검증한다. HTML은 docs/event-page-research.md 발췌."""
+"""네트워크 없이 파싱·순회 함수만 검증한다. HTML은 docs/event-page-research.md 발췌."""
 
-from backend.core.scraper import parse_detail, parse_list
+from datetime import date
+
+from backend.core.scraper import collect_pages, parse_detail, parse_list
 
 LIST_ITEM = """
 <ul>
@@ -113,6 +115,52 @@ def test_parse_detail_b():
     assert detail["detail_title"] == "FY26 한가위 자산 이벤트"
     assert detail["actions"] == ["대상여부 조회하기", "이벤트 신청하기"]
     assert detail["legacy_text"] is None
+
+
+def _pages(*page_ends: list[str]):
+    """parse_list 결과를 흉내낸 페이지 fetch 함수. 각 인자가 한 페이지의 종료일 목록이다."""
+    calls = []
+
+    def fetch_page(page: int) -> list[dict]:
+        calls.append(page)
+        if page > len(page_ends):
+            return []
+        return [
+            {"num": f"{page}{i}", "period_end": end} for i, end in enumerate(page_ends[page - 1])
+        ]
+
+    return fetch_page, calls
+
+
+def test_collect_pages_stops_at_empty_page():
+    fetch_page, calls = _pages(["2026.09.30"], ["2026.08.31"])
+    events, pages = collect_pages(fetch_page)
+    assert len(events) == 2
+    assert pages == 2
+    assert calls == [1, 2, 3]
+
+
+def test_collect_pages_stop_before_uses_page_max():
+    # 3페이지는 최소가 경계 밖이지만 최대가 경계 안이므로 계속 읽고,
+    # 4페이지는 최대가 경계 밖이라 그 페이지까지 포함하고 멈춘다.
+    fetch_page, calls = _pages(
+        ["2026.09.30", "2026.09.01"],
+        ["2026.08.20", "2026.08.01"],
+        ["2025.10.05", "2025.07.31"],
+        ["2025.08.20", "2025.08.01"],
+        ["2025.06.30"],
+    )
+    events, pages = collect_pages(fetch_page, stop_before=date(2025, 9, 17))
+    assert pages == 4
+    assert len(events) == 8
+    assert calls == [1, 2, 3, 4]
+
+
+def test_collect_pages_reports_each_page():
+    fetch_page, _ = _pages(["2026.09.30"], ["2026.08.31", "2026.08.01"])
+    seen = []
+    collect_pages(fetch_page, on_page=lambda page, items: seen.append((page, len(items))))
+    assert seen == [(1, 1), (2, 2)]
 
 
 def test_parse_detail_d():

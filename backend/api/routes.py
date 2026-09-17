@@ -1,18 +1,14 @@
 """대시보드가 쓰는 REST."""
 
 import json
-import threading
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from backend.core import db, queries, scraper
+from backend.core import crawl, db, queries, scraper
 from backend.core.scheduler import SCRAPE_INTERVAL_MIN
 
 router = APIRouter(prefix="/api")
-
-_scrape_lock = threading.Lock()
 
 
 @router.get("/health")
@@ -30,39 +26,43 @@ def health() -> dict:
 
 
 @router.get("/stats")
-def stats(request: Request) -> dict:
+def stats() -> dict:
     conn = db.connect()
     try:
         by_target = {"영업점": 0, "뱅키스": 0}
         events_active = 0
-        for row in conn.execute("SELECT targets FROM events WHERE active = 1"):
+        for row in conn.execute("SELECT targets FROM events WHERE state = 'ongoing'"):
             events_active += 1
             for target in json.loads(row["targets"]):
                 if target in by_target:
                     by_target[target] += 1
 
+        events_ended = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE state = 'ended'"
+        ).fetchone()[0]
         runs = queries.recent_runs(conn, 1)
-        job = request.app.state.scheduler.get_job("scrape")
-        next_run = job.next_run_time if job is not None else None
+        status = crawl.snapshot()
 
         return {
             "events_active": events_active,
+            "events_ended": events_ended,
             "by_target": by_target,
             "images": queries.image_status_counts(conn),
             "new_last_24h": queries.new_events_since(conn, 24),
             "last_run": runs[0] if runs else None,
-            "next_run_at": next_run.isoformat() if next_run is not None else None,
+            "next_run_at": status["next_run_at"],
             "interval_min": SCRAPE_INTERVAL_MIN,
+            "crawl": status,
         }
     finally:
         conn.close()
 
 
 @router.get("/events")
-def events(target: str | None = None) -> dict:
+def events(target: str | None = None, state: str = "ongoing") -> dict:
     conn = db.connect()
     try:
-        return queries.list_events(conn, target)
+        return queries.list_events(conn, target, state)
     finally:
         conn.close()
 
@@ -88,11 +88,23 @@ def runs(limit: int = 20) -> list[dict]:
         conn.close()
 
 
+@router.get("/crawl/status")
+def crawl_status() -> dict:
+    return crawl.snapshot()
+
+
 @router.post("/scrape")
-async def scrape():
-    if not _scrape_lock.acquire(blocking=False):
-        return JSONResponse(status_code=409, content={"error": "already running"})
+def scrape(mode: str = "live"):
+    if mode not in scraper.LIST_TAB:
+        return JSONResponse(status_code=400, content={"error": "mode must be live or backfill"})
     try:
-        return await run_in_threadpool(scraper.run_once)
-    finally:
-        _scrape_lock.release()
+        crawl.start_background(mode, "manual")
+    except crawl.AlreadyRunning:
+        return JSONResponse(status_code=409, content={"error": "already running"})
+    except crawl.Debounced as exc:
+        return JSONResponse(
+            status_code=429,
+            content={"error": "too soon", "retry_after_sec": exc.retry_after_sec},
+            headers={"Retry-After": str(exc.retry_after_sec)},
+        )
+    return JSONResponse(status_code=202, content={"started": True, "mode": mode})

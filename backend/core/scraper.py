@@ -4,7 +4,8 @@ import hashlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import date, datetime, timedelta, timezone
 from pathlib import PurePosixPath
 from urllib.parse import urljoin, urlparse
 
@@ -17,7 +18,10 @@ from backend.core import db
 BASE_URL = "https://securities.koreainvestment.com/main/customer/notice/Event.jsp"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 TABS = {"01": "영업점", "02": "뱅키스"}
-MAX_PAGES = 20
+# 진행중 탭(i)과 지난 이벤트 탭(t)
+LIST_TAB = {"live": "i", "backfill": "t"}
+BACKFILL_DAYS = 365
+MAX_PAGES = 60
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -66,25 +70,63 @@ def parse_list(html: str) -> list[dict]:
     return events
 
 
-def fetch_list_all(client: httpx.Client, code: str) -> list[dict]:
-    events = []
+def _period_end(item: dict) -> date | None:
+    value = (item.get("period_end") or "").strip()
+    try:
+        return datetime.strptime(value, "%Y.%m.%d").date()
+    except ValueError:
+        return None
+
+
+def collect_pages(
+    fetch_page: Callable[[int], list[dict]],
+    stop_before: date | None = None,
+    on_page: Callable[[int, list[dict]], None] | None = None,
+) -> tuple[list[dict], int]:
+    """빈 페이지까지 순회한다. 정렬이 엄격하지 않으므로 한 페이지의 '최대' 종료일이
+    stop_before보다 이전일 때만 그 페이지까지 포함하고 멈춘다."""
+    events: list[dict] = []
+    pages = 0
 
     for page in range(1, MAX_PAGES + 1):
-        response = client.get(
-            BASE_URL,
-            params={"gubun": "i", "cmd": "TF04gb010001", "currentPage": page, "CUSTGUBUN": code},
-        )
-        response.raise_for_status()
-        items = parse_list(response.text)
+        items = fetch_page(page)
         if not items:
             break
+
+        pages += 1
         events.extend(items)
+        if on_page is not None:
+            on_page(page, items)
 
-    return events
+        if stop_before is not None:
+            ends = [end for end in (_period_end(item) for item in items) if end is not None]
+            if ends and max(ends) < stop_before:
+                break
+
+    return events, pages
 
 
-def detail_url(num: str, code: str) -> str:
-    return f"{BASE_URL}?gubun=i&cmd=TF04gb010002&num={num}&currentPage=1&CUSTGUBUN={code}"
+def fetch_list_all(
+    client: httpx.Client,
+    code: str,
+    gubun: str,
+    stop_before: date | None = None,
+    on_page: Callable[[str, int, list[dict]], None] | None = None,
+) -> tuple[list[dict], int]:
+    def fetch_page(page: int) -> list[dict]:
+        response = client.get(
+            BASE_URL,
+            params={"gubun": gubun, "cmd": "TF04gb010001", "currentPage": page, "CUSTGUBUN": code},
+        )
+        response.raise_for_status()
+        return parse_list(response.text)
+
+    report = None if on_page is None else (lambda page, items: on_page(code, page, items))
+    return collect_pages(fetch_page, stop_before, report)
+
+
+def detail_url(num: str, code: str, gubun: str) -> str:
+    return f"{BASE_URL}?gubun={gubun}&cmd=TF04gb010002&num={num}&currentPage=1&CUSTGUBUN={code}"
 
 
 def parse_detail(html: str) -> dict:
@@ -166,7 +208,7 @@ def _upsert_event(conn, event: dict, now: str) -> str:
     if row is None:
         conn.execute(
             "INSERT INTO events (num, title, summary, period_start, period_end, thumbnail_url, targets,"
-            " first_seen_at, last_seen_at, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+            " first_seen_at, last_seen_at, state, seen_tab) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ongoing', 'i')",
             (
                 event["num"],
                 event["title"],
@@ -187,7 +229,7 @@ def _upsert_event(conn, event: dict, now: str) -> str:
     )
     conn.execute(
         "UPDATE events SET title = ?, summary = ?, period_start = ?, period_end = ?, thumbnail_url = ?,"
-        " targets = ?, last_seen_at = ?, active = 1 WHERE num = ?",
+        " targets = ?, last_seen_at = ?, state = 'ongoing', seen_tab = 'i' WHERE num = ?",
         (
             event["title"],
             event["summary"],
@@ -200,6 +242,52 @@ def _upsert_event(conn, event: dict, now: str) -> str:
         ),
     )
     return "updated" if changed else "same"
+
+
+def _mark_ended(conn, seen: set[str]) -> None:
+    sql = "UPDATE events SET state = 'ended' WHERE state = 'ongoing'"
+    if seen:
+        sql += f" AND num NOT IN ({','.join('?' * len(seen))})"
+    conn.execute(sql, tuple(seen))
+
+
+def _backfill_event(conn, event: dict, now: str) -> str:
+    """지난 이벤트 탭에서 본 이벤트. 이미 있으면 targets만 합치고 state는 내리지 않는다."""
+    labels = [TABS[code] for code in event["codes"]]
+    row = conn.execute("SELECT targets FROM events WHERE num = ?", (event["num"],)).fetchone()
+
+    if row is None:
+        conn.execute(
+            "INSERT INTO events (num, title, summary, period_start, period_end, thumbnail_url, targets,"
+            " first_seen_at, last_seen_at, state, seen_tab) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ended', 't')",
+            (
+                event["num"],
+                event["title"],
+                event["summary"],
+                event["period_start"],
+                event["period_end"],
+                event["thumbnail_url"],
+                json.dumps(labels, ensure_ascii=False),
+                now,
+                now,
+            ),
+        )
+        return "new"
+
+    merged = set(json.loads(row["targets"])) | set(labels)
+    targets = json.dumps([label for label in TABS.values() if label in merged], ensure_ascii=False)
+    conn.execute(
+        "UPDATE events SET targets = ?, last_seen_at = ? WHERE num = ?", (targets, now, event["num"])
+    )
+    return "updated" if targets != row["targets"] else "same"
+
+
+def _needs_detail(conn, num: str, template: str | None) -> bool:
+    if template is not None:
+        return False
+    return conn.execute(
+        "SELECT 1 FROM event_images WHERE event_num = ? LIMIT 1", (num,)
+    ).fetchone() is None
 
 
 def _store_image(conn, client: httpx.Client, num: str, url: str, now: str) -> bool:
@@ -228,39 +316,72 @@ def _store_image(conn, client: httpx.Client, num: str, url: str, now: str) -> bo
     return True
 
 
-def run_once() -> dict:
+def run_once(mode: str = "live", on_progress: Callable[[int, int], None] | None = None) -> dict:
+    if mode not in LIST_TAB:
+        raise ValueError(f"알 수 없는 mode: {mode}")
+
     conn = db.connect()
     db.init_schema(conn)
 
     started_at = _now()
-    cursor = conn.execute("INSERT INTO scrape_runs (started_at) VALUES (?)", (started_at,))
+    cursor = conn.execute(
+        "INSERT INTO scrape_runs (started_at, mode) VALUES (?, ?)", (started_at, mode)
+    )
     run_id = cursor.lastrowid
     conn.commit()
 
     new_count = 0
     updated_count = 0
     image_count = 0
+    pages = 0
+    merged: list[dict] = []
     failed: list[str] = []
+
+    gubun = LIST_TAB[mode]
+    stop_before = date.today() - timedelta(days=BACKFILL_DAYS) if mode == "backfill" else None
 
     try:
         with httpx.Client(headers=HEADERS, timeout=30.0, follow_redirects=True) as client:
-            merged = _merge_lists({code: fetch_list_all(client, code) for code in TABS})
-            logger.info("목록 %d건 수집", len(merged))
+            progress = {"pages": 0, "events": 0}
+
+            def report(code: str, page: int, items: list[dict]) -> None:
+                progress["pages"] += 1
+                progress["events"] += len(items)
+                if on_progress is not None:
+                    on_progress(progress["pages"], progress["events"])
+
+            lists = {}
+            for code in TABS:
+                lists[code], read = fetch_list_all(client, code, gubun, stop_before, report)
+                pages += read
+            merged = _merge_lists(lists)
+            logger.info("%s 목록 %d건 수집(%d페이지)", mode, len(merged), pages)
 
             now = _now()
-            conn.execute("UPDATE events SET active = 0")
             for event in merged:
-                result = _upsert_event(conn, event, now)
+                result = (
+                    _upsert_event(conn, event, now)
+                    if mode == "live"
+                    else _backfill_event(conn, event, now)
+                )
                 if result == "new":
                     new_count += 1
                 elif result == "updated":
                     updated_count += 1
+            if mode == "live":
+                _mark_ended(conn, {event["num"] for event in merged})
             conn.commit()
 
             for event in merged:
                 num = event["num"]
+                row = conn.execute(
+                    "SELECT seen_tab, template FROM events WHERE num = ?", (num,)
+                ).fetchone()
+                if mode == "backfill" and not _needs_detail(conn, num, row["template"]):
+                    continue
+
                 try:
-                    response = client.get(detail_url(num, event["codes"][0]))
+                    response = client.get(detail_url(num, event["codes"][0], row["seen_tab"]))
                     response.raise_for_status()
                     detail = parse_detail(response.text)
                 except Exception:
@@ -297,15 +418,18 @@ def run_once() -> dict:
         raise
 
     conn.execute(
-        "UPDATE scrape_runs SET finished_at = ?, new_count = ?, updated_count = ?, image_count = ? WHERE id = ?",
-        (_now(), new_count, updated_count, image_count, run_id),
+        "UPDATE scrape_runs SET finished_at = ?, new_count = ?, updated_count = ?, image_count = ?,"
+        " pages = ?, events_seen = ? WHERE id = ?",
+        (_now(), new_count, updated_count, image_count, pages, len(merged), run_id),
     )
     conn.commit()
     conn.close()
 
     return {
         "run_id": run_id,
+        "mode": mode,
         "events": len(merged),
+        "pages": pages,
         "new": new_count,
         "updated": updated_count,
         "images": image_count,
@@ -314,5 +438,11 @@ def run_once() -> dict:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=sorted(LIST_TAB), default="live")
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
-    print(json.dumps(run_once(), ensure_ascii=False))
+    print(json.dumps(run_once(args.mode), ensure_ascii=False))
