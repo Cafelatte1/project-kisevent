@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIS Event</title>
+<style>
+:root {
+  color-scheme: light;
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --line: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.10);
+  --branch: #2a78d6;
+  --banki: #1baf7a;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --wash: rgba(11, 11, 11, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --line: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.10);
+    --branch: #3987e5;
+    --banki: #199e70;
+    --wash: rgba(255, 255, 255, 0.06);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --line: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.10);
+  --branch: #3987e5;
+  --banki: #199e70;
+  --wash: rgba(255, 255, 255, 0.06);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 56px; }
+
+header.bar {
+  display: flex; flex-wrap: wrap; gap: 12px 16px;
+  align-items: baseline; justify-content: space-between;
+  padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 20px;
+}
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+.bar .meta { color: var(--ink-2); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.bar .right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.state { font-size: 12px; color: var(--muted); }
+.state.err { color: var(--critical); }
+
+button {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 13px; cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--wash); }
+button:disabled { color: var(--muted); cursor: default; }
+
+.tiles {
+  display: grid; gap: 10px; margin-bottom: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.tile {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px;
+}
+.tile .label { color: var(--ink-2); font-size: 12px; }
+.tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; letter-spacing: -0.02em; }
+.tile.lead .value { font-size: 40px; }
+.tiles.small .tile .value { font-size: 20px; }
+.tiles.small { margin-bottom: 22px; }
+
+h2 { font-size: 14px; font-weight: 600; margin: 26px 0 10px; color: var(--ink-2); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 12px; }
+.group { display: flex; gap: 6px; align-items: center; }
+.group > span { font-size: 12px; color: var(--muted); }
+.chip {
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+  border-radius: 999px; padding: 5px 11px; font-size: 13px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--plane); border-color: var(--ink); }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr.row { cursor: pointer; }
+tbody tr.row:hover { background: var(--wash); }
+tbody tr.row[aria-selected="true"] { background: var(--wash); }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.t-title { font-weight: 500; color: var(--ink); }
+.dim { color: var(--muted); }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; color: var(--ink-2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+.dot.analyzed { background: var(--good); }
+.dot.transcribed { background: var(--warning); }
+.dot.transcribing { background: var(--serious); }
+.dot.failed { background: var(--critical); }
+.tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); margin-right: 4px; white-space: nowrap; }
+.tag.영업점 { border-color: var(--branch); color: var(--branch); }
+.tag.뱅키스 { border-color: var(--banki); color: var(--banki); }
+
+#detail { margin: 18px 0 0; padding: 16px 18px; }
+#detail .head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+#detail h3 { margin: 0 0 4px; font-size: 16px; }
+#detail .sub { color: var(--ink-2); font-size: 13px; }
+.section { margin-top: 16px; }
+.section > h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em; }
+.benefit { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.benefit .name { font-weight: 600; }
+.benefit .reward { color: var(--ink-2); margin-top: 2px; }
+ul.list { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }
+ul.list li { margin: 2px 0; }
+ul.list.caveat li { color: var(--critical); }
+.kv { color: var(--ink-2); }
+details { margin-top: 16px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+pre.transcript {
+  white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; padding: 12px;
+  background: var(--plane); border: 1px solid var(--line); border-radius: 8px;
+  font-size: 12px; color: var(--ink-2); max-height: 420px; overflow: auto;
+}
+a { color: var(--branch); }
+.empty { padding: 18px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .hide-sm { display: none; }
+  .tile .value { font-size: 22px; }
+  .tile.lead .value { font-size: 32px; }
+  th, td { padding: 8px 10px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <div>
+      <h1>KIS Event</h1>
+      <div class="meta">
+        <span id="last-run">마지막 수집 —</span>
+        <span id="next-run">다음 수집 —</span>
+      </div>
+    </div>
+    <div class="right">
+      <span class="state" id="state"></span>
+      <button id="scrape">지금 수집</button>
+    </div>
+  </header>
+
+  <div class="tiles" id="tiles-main"></div>
+  <div class="tiles small" id="tiles-img"></div>
+
+  <h2>이벤트</h2>
+  <div class="filters">
+    <div class="group" id="f-target"><span>대상</span></div>
+    <div class="group" id="f-status"><span>분석</span></div>
+    <span class="state" id="count"></span>
+  </div>
+  <div class="card scroll">
+    <table>
+      <thead><tr>
+        <th>제목</th><th>대상</th><th>기간</th><th class="hide-sm">템플릿</th>
+        <th>분석</th><th class="hide-sm">요약</th>
+      </tr></thead>
+      <tbody id="events"><tr><td colspan="6" class="empty">불러오는 중…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="detail" hidden></div>
+
+  <h2>최근 실행</h2>
+  <div class="card scroll">
+    <table>
+      <thead><tr>
+        <th>시작</th><th>소요(초)</th><th>신규</th><th>갱신</th><th>이미지</th><th>오류</th>
+      </tr></thead>
+      <tbody id="runs"><tr><td colspan="6" class="empty">불러오는 중…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const STATUS_LABEL = {
+  pending: "분석 대기", transcribing: "전사 중", transcribed: "전사 완료",
+  analyzed: "분석 완료", failed: "실패",
+};
+const TARGETS = [["", "전체"], ["영업점", "영업점"], ["뱅키스", "뱅키스"]];
+const ANALYSIS = [["", "전체"], ["analyzed", "분석 완료"], ["pending", "미분석"]];
+
+const state = { events: [], target: "", analysis: "", selected: null, busy: false };
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+
+function fmtTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return "—";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function setState(text, isError) {
+  const node = $("state");
+  node.textContent = text || "";
+  node.classList.toggle("err", !!isError);
+}
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} → ${res.status}`);
+  return res.json();
+}
+
+function tile(label, value, lead) {
+  const node = el("div", lead ? "tile lead" : "tile");
+  node.append(el("div", "label", label), el("div", "value", value));
+  return node;
+}
+
+function statusBadge(status) {
+  const badge = el("span", "badge");
+  badge.append(el("span", `dot ${status || ""}`), el("span", null, STATUS_LABEL[status] || "이미지 없음"));
+  return badge;
+}
+
+function targetTags(targets) {
+  const box = el("span");
+  targets.forEach((t) => box.append(el("span", `tag ${t}`, t)));
+  return box;
+}
+
+function renderStats(stats) {
+  $("last-run").textContent = "마지막 수집 " + fmtTime(stats.last_run && stats.last_run.finished_at);
+  $("next-run").textContent = `다음 수집 ${fmtTime(stats.next_run_at)} (${stats.interval_min}분 주기)`;
+
+  const main = $("tiles-main");
+  main.replaceChildren(
+    tile("진행 중 이벤트", stats.events_active, true),
+    tile("영업점", stats.by_target["영업점"]),
+    tile("뱅키스", stats.by_target["뱅키스"]),
+    tile("24시간 신규", stats.new_last_24h),
+  );
+
+  const imgs = $("tiles-img");
+  imgs.replaceChildren(
+    ...Object.keys(STATUS_LABEL).map((key) => tile(STATUS_LABEL[key], stats.images[key] ?? 0)),
+  );
+}
+
+function matches(event) {
+  if (state.target && !event.targets.includes(state.target)) return false;
+  if (state.analysis === "analyzed" && event.analysis_status !== "analyzed") return false;
+  if (state.analysis === "pending" && event.analysis_status === "analyzed") return false;
+  return true;
+}
+
+function renderEvents() {
+  const rows = state.events.filter(matches);
+  const body = $("events");
+  $("count").textContent = `${rows.length}건 / 전체 ${state.events.length}건`;
+
+  if (!rows.length) {
+    const tr = el("tr");
+    const td = el("td", "empty", "조건에 맞는 이벤트가 없습니다");
+    td.colSpan = 6;
+    tr.append(td);
+    body.replaceChildren(tr);
+    return;
+  }
+
+  body.replaceChildren(...rows.map((event) => {
+    const tr = el("tr", "row");
+    if (state.selected === event.num) tr.setAttribute("aria-selected", "true");
+    tr.onclick = () => selectEvent(event.num);
+
+    const title = el("td");
+    title.append(el("div", "t-title", event.title));
+    tr.append(title);
+
+    const target = el("td");
+    target.append(targetTags(event.targets));
+    tr.append(target);
+
+    tr.append(el("td", "num dim", `${event.period_start || "—"} ~ ${event.period_end || "—"}`));
+    tr.append(el("td", "hide-sm dim", event.template || "—"));
+
+    const status = el("td");
+    status.append(statusBadge(event.analysis_status));
+    tr.append(status);
+
+    tr.append(
+      event.analysis_summary
+        ? el("td", "hide-sm", event.analysis_summary)
+        : el("td", "hide-sm dim", "미분석"),
+    );
+    return tr;
+  }));
+}
+
+function renderRuns(runs) {
+  const body = $("runs");
+  if (!runs.length) {
+    const tr = el("tr");
+    const td = el("td", "empty", "실행 이력이 없습니다");
+    td.colSpan = 6;
+    tr.append(td);
+    body.replaceChildren(tr);
+    return;
+  }
+  body.replaceChildren(...runs.map((run) => {
+    const tr = el("tr");
+    tr.append(el("td", "num", fmtTime(run.started_at)));
+    tr.append(el("td", "num", run.duration_sec === null ? "실행 중" : run.duration_sec));
+    tr.append(el("td", "num", run.new_count ?? "—"));
+    tr.append(el("td", "num", run.updated_count ?? "—"));
+    tr.append(el("td", "num", run.image_count ?? "—"));
+    tr.append(run.error ? el("td", null, run.error) : el("td", "dim", "—"));
+    return tr;
+  }));
+}
+
+function section(title, ...nodes) {
+  const box = el("div", "section");
+  box.append(el("h4", null, title), ...nodes);
+  return box;
+}
+
+function bullets(items, cls) {
+  const ul = el("ul", cls ? `list ${cls}` : "list");
+  items.forEach((item) => ul.append(el("li", null, item)));
+  return ul;
+}
+
+function periodsTable(periods) {
+  const table = el("table");
+  const head = el("tr");
+  ["유형", "시작", "종료", "비고"].forEach((h) => head.append(el("th", null, h)));
+  const thead = el("thead");
+  thead.append(head);
+  const tbody = el("tbody");
+  periods.forEach((p) => {
+    const tr = el("tr");
+    tr.append(el("td", null, p.type));
+    tr.append(el("td", "num", p.start || "—"));
+    tr.append(el("td", "num", p.end || "—"));
+    tr.append(el("td", p.note ? null : "dim", p.note || "—"));
+    tbody.append(tr);
+  });
+  table.append(thead, tbody);
+  const card = el("div", "card scroll");
+  card.append(table);
+  return card;
+}
+
+function benefitCard(benefit) {
+  const box = el("div", "benefit");
+  box.append(el("div", "name", benefit.name));
+  box.append(el("div", "reward", `${benefit.reward_type} · ${benefit.reward}`));
+  if (benefit.cap) box.append(el("div", "kv", `한도: ${benefit.cap}`));
+  if (benefit.lottery) {
+    const winners = benefit.lottery.winners ? `${benefit.lottery.winners}명` : "";
+    const note = [winners, benefit.lottery.note].filter(Boolean).join(" · ");
+    if (note) box.append(el("div", "kv", `추첨: ${note}`));
+  }
+  if (benefit.conditions && benefit.conditions.length) box.append(bullets(benefit.conditions));
+  if (benefit.caveats && benefit.caveats.length) box.append(bullets(benefit.caveats, "caveat"));
+  return box;
+}
+
+function analysisNodes(analysis) {
+  const nodes = [];
+  if (analysis.tagline) nodes.push(el("div", "sub", analysis.tagline));
+
+  if (analysis.periods && analysis.periods.length) {
+    nodes.push(section("기간", periodsTable(analysis.periods)));
+  }
+
+  const t = analysis.targets;
+  if (t) {
+    const box = el("div");
+    const chips = el("div");
+    [...(t.account_types || []), ...(t.customer_types || [])].forEach(
+      (name) => chips.append(el("span", "tag", name)),
+    );
+    box.append(chips);
+    if (t.conditions && t.conditions.length) box.append(bullets(t.conditions));
+    nodes.push(section("대상", box));
+  }
+
+  if (analysis.benefits && analysis.benefits.length) {
+    nodes.push(section("혜택", ...analysis.benefits.map(benefitCard)));
+  }
+
+  const p = analysis.participation;
+  if (p) {
+    const box = el("div");
+    box.append(el("div", "kv", p.requires_application ? "신청 필요" : "별도 신청 없음"));
+    if (p.auto_enroll) box.append(el("div", "kv", "자동 참여"));
+    if (p.channels && p.channels.length) box.append(el("div", "kv", `경로: ${p.channels.join(", ")}`));
+    if (p.steps && p.steps.length) box.append(bullets(p.steps));
+    if (p.consents && p.consents.length) box.append(bullets(p.consents));
+    nodes.push(section("참여", box));
+  }
+
+  if (analysis.notes && analysis.notes.length) nodes.push(section("유의사항", bullets(analysis.notes)));
+
+  const c = analysis.compliance;
+  if (c && (c.number || c.valid_from || c.valid_to)) {
+    const span = [c.valid_from, c.valid_to].filter(Boolean).join(" ~ ");
+    nodes.push(section("준법감시", el("div", "kv", [c.number, span].filter(Boolean).join(" · "))));
+  }
+  return nodes;
+}
+
+function renderDetail(event) {
+  const panel = $("detail");
+  const head = el("div", "head");
+  const left = el("div");
+  left.append(el("h3", null, event.title));
+  left.append(el("div", "sub", `${event.period_start || "—"} ~ ${event.period_end || "—"} · 템플릿 ${event.template || "—"} · No.${event.num}`));
+  const tags = el("div", "sub");
+  tags.append(targetTags(event.targets));
+  left.append(tags);
+
+  const close = el("button", null, "닫기");
+  close.onclick = () => { state.selected = null; panel.hidden = true; renderEvents(); };
+  head.append(left, close);
+  panel.replaceChildren(head);
+
+  if (event.summary) panel.append(section("목록 요약", el("div", "kv", event.summary)));
+  if (event.actions && event.actions.length) panel.append(section("버튼", bullets(event.actions)));
+
+  const image = event.image;
+  if (!image) {
+    panel.append(section("이미지", el("div", "dim", "배너 이미지가 없습니다")));
+    return;
+  }
+
+  const meta = el("div");
+  meta.append(statusBadge(image.status));
+  const link = el("a", null, "배너 이미지 열기");
+  link.href = image.image_url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  meta.append(el("span", null, " · "), link);
+  panel.append(section("배너", meta));
+
+  if (image.summary) panel.append(section("분석 요약", el("div", "kv", image.summary)));
+  if (image.analysis) {
+    panel.append(...analysisNodes(image.analysis));
+  } else {
+    panel.append(section("분석", el("div", "dim", "아직 분석되지 않았습니다")));
+  }
+
+  if (image.transcript && image.transcript.trim()) {
+    const details = el("details");
+    details.append(el("summary", null, "전사문 보기"));
+    details.append(el("pre", "transcript", image.transcript));
+    panel.append(details);
+  }
+}
+
+async function selectEvent(num) {
+  state.selected = num;
+  renderEvents();
+  const panel = $("detail");
+  panel.hidden = false;
+  panel.replaceChildren(el("div", "empty", "불러오는 중…"));
+  try {
+    renderDetail(await getJSON(`/api/events/${encodeURIComponent(num)}`));
+  } catch (err) {
+    panel.replaceChildren(el("div", "empty", `상세를 불러오지 못했습니다: ${err.message}`));
+  }
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function buildFilters() {
+  const bind = (host, options, key) => {
+    options.forEach(([value, label]) => {
+      const chip = el("button", "chip", label);
+      chip.setAttribute("aria-pressed", String(state[key] === value));
+      chip.onclick = () => {
+        state[key] = value;
+        host.querySelectorAll(".chip").forEach((node) => node.setAttribute("aria-pressed", "false"));
+        chip.setAttribute("aria-pressed", "true");
+        renderEvents();
+      };
+      host.append(chip);
+    });
+  };
+  bind($("f-target"), TARGETS, "target");
+  bind($("f-status"), ANALYSIS, "analysis");
+}
+
+async function refresh() {
+  try {
+    const [stats, events, runs] = await Promise.all([
+      getJSON("/api/stats"), getJSON("/api/events"), getJSON("/api/runs?limit=20"),
+    ]);
+    renderStats(stats);
+    state.events = events.events;
+    renderEvents();
+    renderRuns(runs);
+    setState(`갱신 ${fmtTime(new Date().toISOString())}`);
+  } catch (err) {
+    setState(`불러오기 실패: ${err.message}`, true);
+  }
+}
+
+async function scrapeNow() {
+  if (state.busy) return;
+  state.busy = true;
+  $("scrape").disabled = true;
+  setState("수집 중…");
+  try {
+    const res = await fetch("/api/scrape", { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || res.status);
+    await refresh();
+    if (state.selected) await selectEvent(state.selected);
+    setState(`수집 완료: ${body.events}건`);
+  } catch (err) {
+    setState(`수집 실패: ${err.message}`, true);
+  } finally {
+    state.busy = false;
+    $("scrape").disabled = false;
+  }
+}
+
+buildFilters();
+$("scrape").onclick = scrapeNow;
+refresh();
+setInterval(() => { if (!state.busy) refresh(); }, 60000);
+</script>
+</body>
+</html>

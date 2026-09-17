@@ -8,31 +8,14 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ContentBlock, ImageContent, TextContent
 from pydantic import ValidationError
 
-from backend.core import db, tiles
+from backend.core import db, queries, tiles
 from backend.mcp.schema import SCHEMA_GUIDE, SCHEMA_VERSION, AnalysisV1
 
 mcp = MCPServer("kis-event")
 
-PENDING_SQL = "SELECT COUNT(*) FROM event_images WHERE status NOT IN ('analyzed', 'superseded', 'failed')"
-LATEST_IMAGE_SQL = (
-    "SELECT id, status FROM event_images WHERE event_num = ? AND status != 'superseded'"
-    " ORDER BY id DESC LIMIT 1"
-)
-
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _pending_images(conn) -> int:
-    return conn.execute(PENDING_SQL).fetchone()[0]
-
-
-def _transcript(conn, image_id: int) -> str:
-    rows = conn.execute(
-        "SELECT text FROM image_tiles WHERE image_id = ? ORDER BY idx", (image_id,)
-    ).fetchall()
-    return "\n\n".join(row["text"] or "" for row in rows)
 
 
 @mcp.tool()
@@ -40,43 +23,7 @@ def list_events(target: str | None = None) -> dict:
     """현재 진행 중인 한국투자증권 이벤트 목록. target에 '영업점' 또는 '뱅키스'를 주면 그 고객대상만 돌려준다. 응답의 pending_images가 0보다 크면 아직 전사·구조화되지 않은 배너 이미지가 있다는 뜻이다. 이벤트 내용은 거의 전부 이미지 안에 있으므로, 사용자 질문에 답하기 전에 get_pending_tiles → save_tile_text → (이미지의 타일이 모두 저장되면) get_transcript → save_analysis 순서로 분석을 먼저 끝내라. 각 이벤트의 analysis_summary가 있으면 그것이 이미지에서 추출한 요약이고, 없으면 아직 분석 전이다."""
     conn = db.connect()
     try:
-        events = []
-        for row in conn.execute("SELECT * FROM events WHERE active = 1 ORDER BY num DESC"):
-            targets = json.loads(row["targets"])
-            if target and target not in targets:
-                continue
-
-            image = conn.execute(LATEST_IMAGE_SQL, (row["num"],)).fetchone()
-            analysis = None
-            if image is not None:
-                analysis = conn.execute(
-                    "SELECT summary FROM image_analysis WHERE image_id = ?", (image["id"],)
-                ).fetchone()
-
-            events.append(
-                {
-                    "num": row["num"],
-                    "title": row["title"],
-                    "targets": targets,
-                    "period_start": row["period_start"],
-                    "period_end": row["period_end"],
-                    "summary": row["summary"],
-                    "template": row["template"],
-                    "analysis_status": image["status"] if image is not None else None,
-                    "analysis_summary": analysis["summary"] if analysis is not None else None,
-                }
-            )
-
-        last_run = conn.execute(
-            "SELECT finished_at FROM scrape_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-
-        return {
-            "fetched_at": last_run["finished_at"] if last_run is not None else None,
-            "pending_images": _pending_images(conn),
-            "count": len(events),
-            "events": events,
-        }
+        return queries.list_events(conn, target)
     finally:
         conn.close()
 
@@ -188,7 +135,7 @@ def get_transcript(image_id: int) -> dict:
             "list_summary": row["summary"],
             "list_actions": json.loads(row["actions"] or "[]"),
             "detail_title": row["detail_title"],
-            "transcript": _transcript(conn, image_id),
+            "transcript": queries.transcript(conn, image_id),
             "schema_guide": SCHEMA_GUIDE,
         }
 
@@ -240,7 +187,7 @@ def save_analysis(image_id: int, analysis: dict, summary: str) -> dict:
             "ok": True,
             "image_id": image_id,
             "event_num": row["event_num"],
-            "pending_images": _pending_images(conn),
+            "pending_images": queries.pending_images(conn),
         }
     finally:
         conn.close()
@@ -251,29 +198,7 @@ def get_event(num: str) -> dict:
     """이벤트 한 건의 상세: 목록 정보, 구조화된 분석 JSON, 전체 전사문. 조건·유의사항·금액처럼 구체적인 질문에 답할 때 쓴다."""
     conn = db.connect()
     try:
-        row = conn.execute("SELECT * FROM events WHERE num = ?", (num,)).fetchone()
-        if row is None:
-            return {"error": "not found"}
-
-        event = dict(row)
-        event["targets"] = json.loads(row["targets"])
-        event["actions"] = json.loads(row["actions"] or "[]")
-
-        image = conn.execute(LATEST_IMAGE_SQL, (num,)).fetchone()
-        if image is None:
-            event["image"] = None
-            return event
-
-        analysis = conn.execute(
-            "SELECT summary, json FROM image_analysis WHERE image_id = ?", (image["id"],)
-        ).fetchone()
-        event["image"] = {
-            "image_id": image["id"],
-            "status": image["status"],
-            "analysis": json.loads(analysis["json"]) if analysis is not None else None,
-            "summary": analysis["summary"] if analysis is not None else None,
-            "transcript": _transcript(conn, image["id"]),
-        }
-        return event
+        event = queries.event_detail(conn, num)
+        return event if event is not None else {"error": "not found"}
     finally:
         conn.close()
