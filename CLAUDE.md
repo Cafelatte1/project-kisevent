@@ -24,6 +24,7 @@ Collection never runs on its own (on demand). Two modes: `live` (called by MCP `
 - `docs/event-page-research.md` — site measurements and design decisions (Korean)
 - `SETUP.md` — install procedure for the serving PC (Windows, non-developer), executed by the agent (Korean)
 - `.mcp.json` — lets Claude Code pick up `kis-event` (HTTP `/mcp`) automatically in this folder
+- `install.bat` — Windows one-shot installer after `git clone`: installs uv if missing, `uv sync`, registers the `KISEvent` logon task and starts it, merges the `kis-event` stdio entry into `claude_desktop_config.json` (existing entries kept, `.bak` written), waits for `/api/health`
 - `run.bat` / `run-hidden.vbs` — Windows: kill whatever holds port 4000 and start the server (the vbs runs it without a console, for Task Scheduler). `run.sh` — the same for macOS/Linux
 
 ## Commands (from the repo root)
