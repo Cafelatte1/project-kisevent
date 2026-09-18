@@ -20,7 +20,6 @@ LIBRARY_LEVELS = {
     "uvicorn.access": "DEBUG",
     "uvicorn": "INFO",
     "uvicorn.error": "INFO",
-    "apscheduler": "INFO",
 }
 # access log는 INFO로 올라오지만 DEBUG로 낮춰 기본 INFO 콘솔·파일에서는 보이지 않게 한다
 RECORD_LEVELS = {"uvicorn.access": "DEBUG"}

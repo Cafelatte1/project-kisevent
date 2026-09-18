@@ -1,4 +1,4 @@
-"""스케줄러 + REST + MCP를 한 프로세스로 띄운다."""
+"""REST + MCP를 한 프로세스로 띄운다. 수집은 요청이 있을 때만(MCP sync_now·대시보드 백필) 돈다."""
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -11,9 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from backend.api import routes
-from backend.core import crawl, db, scheduler
+from backend.core import db
 from backend.core.logging import setup
-from backend.core.scheduler import SCRAPE_INTERVAL_MIN
 from backend.mcp.server import mcp
 
 setup("server")
@@ -45,19 +44,9 @@ async def lifespan(app: FastAPI):
     else:
         boot.debug("interrupted runs marked n=0")
 
-    running = scheduler.start()
-    app.state.scheduler = running
-    boot.info(
-        "scheduler started interval_min={} next_run={}",
-        SCRAPE_INTERVAL_MIN,
-        crawl.snapshot()["next_run_at"],
-    )
     boot.info("listening port={}", PORT)
-    try:
-        async with mcp.session_manager.run():
-            yield
-    finally:
-        scheduler.stop(running)
+    async with mcp.session_manager.run():
+        yield
 
 
 app = FastAPI(lifespan=lifespan)

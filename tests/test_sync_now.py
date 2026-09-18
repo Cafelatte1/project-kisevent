@@ -41,7 +41,7 @@ def test_local_sync_waits_and_returns_counts_then_debounces():
 def test_local_sync_reports_running():
     gate = threading.Event()
     crawl.RUNNER = lambda mode, on_progress: gate.wait(3) or {"mode": mode}
-    crawl.start_background("live", trigger="scheduler")
+    crawl.start_background("live", trigger="manual")
     assert asyncio.run(server.sync_now()) == {"synced": False, "already_running": True}
     gate.set()
     # 다음 테스트가 락을 갈아끼우기 전에 백그라운드 스레드가 끝나야 한다

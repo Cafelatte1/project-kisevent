@@ -5,7 +5,6 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from backend.core import crawl, db, queries, scraper
-from backend.core.scheduler import SCRAPE_INTERVAL_MIN
 
 router = APIRouter(prefix="/api")
 log = logger.bind(ctx="api")
@@ -49,8 +48,6 @@ def stats() -> dict:
             "images": images,
             "new_last_24h": queries.new_events_since(conn, 24),
             "last_run": runs[0] if runs else None,
-            "next_run_at": status["next_run_at"],
-            "interval_min": SCRAPE_INTERVAL_MIN,
             "crawl": status,
         }
     finally:

@@ -40,7 +40,6 @@ class CrawlStatus:
     last_mode: str | None = None
     last_error: str | None = None
     last_result: dict | None = None
-    next_run_at: str | None = None
 
 
 status = CrawlStatus()
@@ -58,11 +57,6 @@ def snapshot() -> dict:
         return asdict(status)
 
 
-def set_next_run(value: str | None) -> None:
-    with _state_lock:
-        status.next_run_at = value
-
-
 def _begin(mode: str, trigger: str) -> None:
     """호출 스레드에서 게이트를 통과시킨다. 통과하면 락을 쥔 채로 돌아온다."""
     global _last_started_at
@@ -74,8 +68,7 @@ def _begin(mode: str, trigger: str) -> None:
         raise AlreadyRunning()
 
     try:
-        # 스케줄러만 debounce를 건너뛴다(대시보드 manual·MCP mcp 모두 적용)
-        if trigger != "scheduler" and _last_started_at is not None:
+        if _last_started_at is not None:
             elapsed = time.monotonic() - _last_started_at
             if elapsed < DEBOUNCE_SEC:
                 retry_after = max(1, math.ceil(DEBOUNCE_SEC - elapsed))
@@ -138,7 +131,7 @@ def _execute(mode: str) -> dict:
     return result
 
 
-def run(mode: str, trigger: str = "scheduler") -> dict:
+def run(mode: str, trigger: str = "manual") -> dict:
     _begin(mode, trigger)
     return _execute(mode)
 

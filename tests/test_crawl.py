@@ -36,7 +36,7 @@ def test_second_run_while_running_raises():
         return {"mode": mode}
 
     crawl.RUNNER = runner
-    crawl.start_background("live", trigger="scheduler")
+    crawl.start_background("live", trigger="manual")
 
     while crawl.snapshot()["state"] != "running":
         time.sleep(0.01)
@@ -62,21 +62,12 @@ def test_manual_run_within_window_is_debounced():
     assert crawl.snapshot()["state"] == "idle"
 
 
-def test_scheduler_trigger_ignores_debounce():
-    modes = []
-    crawl.RUNNER = lambda mode, on_progress: modes.append(mode) or {"mode": mode}
-
-    crawl.run("live", trigger="scheduler")
-    crawl.run("backfill", trigger="scheduler")
-    assert modes == ["live", "backfill"]
-
-
 def test_failure_is_recorded_not_raised():
     def runner(mode, on_progress):
         raise RuntimeError("boom")
 
     crawl.RUNNER = runner
-    crawl.run("live", trigger="scheduler")
+    crawl.run("live", trigger="manual")
 
     status = crawl.snapshot()
     assert status["state"] == "idle"

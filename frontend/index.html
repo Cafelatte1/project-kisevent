@@ -164,7 +164,7 @@ details summary { cursor: pointer; color: var(--branch); font-size: 13px; }
     <div class="right">
       <span class="pill" id="crawl-pill">대기</span>
       <span class="state" id="state"></span>
-      <button id="scrape-backfill">과거 100건 백필</button>
+      <button id="scrape-backfill">지난 이벤트 100건 수집</button>
     </div>
   </header>
 
@@ -203,13 +203,13 @@ details summary { cursor: pointer; color: var(--branch); font-size: 13px; }
 <script>
 const TARGETS = [["", "전체"], ["영업점", "영업점"], ["뱅키스", "뱅키스"], ["연금", "연금"], ["미상", "요약 전"]];
 const EVENT_STATES = [["ongoing", "진행중"], ["ended", "종료"], ["all", "전체"]];
-const MODE_LABEL = { live: "라이브", backfill: "백필" };
+const MODE_LABEL = { live: "진행중", backfill: "지난 이벤트" };
 const POLL_IDLE_MS = 15000;
 const POLL_RUNNING_MS = 3000;
 
 const state = {
   events: [], target: "", eventState: "ongoing",
-  selected: null, crawl: null, intervalMin: 15, lockUntil: 0, timer: null,
+  selected: null, crawl: null, lockUntil: 0, timer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -227,6 +227,12 @@ function fmtTime(iso) {
   if (isNaN(d)) return "—";
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function runSummary(run) {
+  if (run.error) return `실패(${run.error})`;
+  const mode = MODE_LABEL[run.mode] || run.mode || "";
+  return `${mode} ${run.events_seen ?? "—"}건, 신규 ${run.new_count ?? 0}, 갱신 ${run.updated_count ?? 0}`;
 }
 
 function minutesSince(iso) {
@@ -290,18 +296,12 @@ function targetTags(targetTypes, summarized) {
 }
 
 function renderStats(stats, runs) {
-  state.intervalMin = stats.interval_min;
   // 실행 중인 run은 finished_at이 없으므로 마지막으로 끝난 run을 찾는다
   const lastDone = runs.find((r) => r.finished_at) || null;
-  const finished = lastDone && lastDone.finished_at;
-  $("last-run").textContent = `마지막 수집 ${fmtAgo(finished)} · ${stats.interval_min}분 주기`;
+  $("last-run").textContent = lastDone ? `${fmtAgo(lastDone.finished_at)} 수집 - ${runSummary(lastDone)}` : "아직 수집 없음 — 에이전트에게 이벤트를 물으면 수집됩니다";
 
-  // 주기의 두 배를 넘겨도 수집이 없으면 서버·스케줄러가 멈춘 것으로 본다
-  const age = minutesSince(finished);
   const running = stats.crawl && stats.crawl.state === "running";
-  if (!running && age !== null && age > stats.interval_min * 2) {
-    setAlert(`수집이 ${age}분째 없습니다 — 서버(run.bat)와 스케줄러를 확인하세요`);
-  } else if (!running && lastDone && lastDone.error) {
+  if (!running && lastDone && lastDone.error) {
     setAlert(`마지막 수집 실패: ${lastDone.error}`);
   } else {
     setAlert("");
@@ -556,7 +556,7 @@ async function backfill() {
     const body = await res.json();
     if (res.status === 202) {
       renderCrawl({ ...(state.crawl || {}), state: "running", mode: "backfill", page: 0, events_seen: 0 });
-      setState("백필 시작");
+      setState("수집 시작");
       schedule();
       return;
     }

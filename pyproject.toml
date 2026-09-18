@@ -10,7 +10,6 @@ dependencies = [
     "pydantic",
     "fastapi",
     "uvicorn",
-    "apscheduler",
     "mcp",
     "numpy",
     "platformdirs>=4.11.9",
