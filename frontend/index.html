@@ -131,16 +131,33 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tag.연금 { border-color: var(--pension); color: var(--pension); }
 .tag.none { color: var(--muted); border-style: dashed; }
 
-#detail { margin: 18px 0 0; padding: 16px 18px; }
+#detail { margin: 18px 0 0; padding: 18px 20px 20px; }
 #detail .head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
-#detail h3 { margin: 0 0 4px; font-size: 16px; }
-#detail .sub { color: var(--ink-2); font-size: 13px; }
+#detail h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -0.01em; }
+#detail .sub { color: var(--ink-2); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+#detail .lead { margin-top: 10px; font-size: 15px; color: var(--ink); }
+.dday { font-weight: 600; color: var(--ink); }
+.dday.soon { color: var(--critical); }
+.cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 16px; }
+.info { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--plane); }
+.info > h4 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em; }
+.info .main { font-size: 15px; color: var(--ink); font-weight: 500; }
+.info .row { margin-top: 10px; }
+.info .row > .k { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.info .chips { margin-bottom: 8px; }
+ul.list { margin: 4px 0 0; padding-left: 0; list-style: none; color: var(--ink-2); }
+ul.list li { margin: 3px 0; padding-left: 18px; position: relative; }
+ul.list li::before { content: "✓"; position: absolute; left: 0; color: var(--good); }
+ul.list.caveat li::before { content: "✕"; color: var(--critical); }
+ul.list.caveat li { color: var(--critical); }
+.perf { margin-top: 10px; padding: 8px 10px; border-left: 3px solid var(--warning); background: var(--wash); color: var(--ink); border-radius: 0 6px 6px 0; }
 .section { margin-top: 16px; }
 .section > h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em; }
-ul.list { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }
-ul.list li { margin: 2px 0; }
-ul.list.caveat li { color: var(--critical); }
 .kv { color: var(--ink-2); }
+.notice { margin-top: 16px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: 13px; }
+.reason { margin-top: 16px; }
+.reason summary { color: var(--muted); }
+.reason .kv { margin-top: 6px; font-size: 13px; }
 a { color: var(--branch); }
 .empty { padding: 18px; color: var(--muted); font-size: 13px; }
 details summary { cursor: pointer; color: var(--branch); font-size: 13px; }
@@ -403,31 +420,67 @@ function bullets(items, cls) {
   return ul;
 }
 
-function summaryNodes(summary) {
-  const nodes = [];
-  if (summary.analysis) nodes.push(section("요약 근거", el("div", "kv", summary.analysis)));
+function card(title, ...nodes) {
+  const box = el("div", "info");
+  box.append(el("h4", null, title), ...nodes);
+  return box;
+}
 
-  const t = summary.target;
-  if (t) {
-    const box = el("div");
-    box.append(targetTags(t.types, true));
-    if (t.text) box.append(el("div", "kv", t.text));
-    if (t.conditions && t.conditions.length) box.append(bullets(t.conditions));
-    if (t.exclusions && t.exclusions.length) box.append(bullets(t.exclusions, "caveat"));
-    nodes.push(section("대상", box));
-  }
+function row(label, node) {
+  const r = el("div", "row");
+  r.append(el("div", "k", label), node);
+  return r;
+}
+
+function daysLeft(periodEnd) {
+  if (!periodEnd) return null;
+  const end = new Date(periodEnd.replace(/\./g, "-") + "T23:59:59");
+  if (isNaN(end)) return null;
+  return Math.ceil((end - Date.now()) / 86400000);
+}
+
+function ddayNode(event) {
+  const d = daysLeft(event.period_end);
+  if (d === null || event.state === "ended") return null;
+  const node = el("span", d <= 7 ? "dday soon" : "dday");
+  node.textContent = d < 0 ? "기간 지남" : d === 0 ? "오늘 마감" : `D-${d}`;
+  return node;
+}
+
+function summaryCards(summary) {
+  const cards = el("div", "cards");
+  const t = summary.target || {};
+  const target = card("참여 대상");
+  const chips = el("div", "chips");
+  chips.append(targetTags(t.types, true));
+  target.append(chips);
+  target.append(el("div", "main", t.text || "대상 문구 없음"));
+  if (t.conditions && t.conditions.length) target.append(row("참여 조건", bullets(t.conditions)));
+  if (t.exclusions && t.exclusions.length) target.append(row("제외 대상", bullets(t.exclusions, "caveat")));
+  cards.append(target);
 
   const c = summary.criteria;
   if (c) {
-    const box = el("div");
-    if (c.text) box.append(el("div", "kv", c.text));
-    const chips = el("div");
-    (c.products || []).forEach((name) => chips.append(el("span", "tag", name)));
-    if (chips.childNodes.length) box.append(chips);
-    if (c.performance) box.append(el("div", "kv", `실적 인정: ${c.performance}`));
-    nodes.push(section("대상 상품·계좌", box));
+    const crit = card("대상 상품·계좌 및 기준");
+    if (c.text) crit.append(el("div", "main", c.text));
+    if (c.products && c.products.length) {
+      const pchips = el("div");
+      c.products.forEach((name) => pchips.append(el("span", "tag", name)));
+      crit.append(row("상품 분류", pchips));
+    }
+    if (c.performance) crit.append(row("실적 인정 기준", el("div", "perf", c.performance)));
+    cards.append(crit);
   }
-  return nodes;
+  return cards;
+}
+
+function sourceLink(event) {
+  const a = el("a", null, "원문 보기");
+  const tab = event.seen_tab || (event.state === "ended" ? "t" : "i");
+  a.href = `https://securities.koreainvestment.com/main/customer/notice/Event.jsp?gubun=${tab}&cmd=TF04gb010002&num=${encodeURIComponent(event.num)}&currentPage=1&CUSTGUBUN=00`;
+  a.target = "_blank";
+  a.rel = "noopener";
+  return a;
 }
 
 function renderDetail(event) {
@@ -435,23 +488,34 @@ function renderDetail(event) {
   const head = el("div", "head");
   const left = el("div");
   left.append(el("h3", null, event.title));
-  const stateLabel = event.state === "ended" ? "종료" : "진행중";
-  left.append(el("div", "sub", `${event.period_start || "—"} ~ ${event.period_end || "—"} · ${stateLabel} · No.${event.num}`));
-  const tags = el("div", "sub");
-  tags.append(targetTags(event.summary && event.summary.target ? event.summary.target.types : null, !!event.summary));
-  left.append(tags);
+
+  const sub = el("div", "sub");
+  sub.append(el("span", null, `신청 기간 ${event.period_start || "—"} ~ ${event.period_end || "—"}`));
+  const dday = ddayNode(event);
+  if (dday) sub.append(dday);
+  sub.append(el("span", "tag", event.state === "ended" ? "종료" : "진행중"));
+  sub.append(el("span", "dim", `No.${event.num}`));
+  sub.append(sourceLink(event));
+  left.append(sub);
+  if (event.list_summary) left.append(el("div", "lead", event.list_summary));
 
   const close = el("button", null, "닫기");
   close.onclick = () => { state.selected = null; panel.hidden = true; renderEvents(); };
   head.append(left, close);
   panel.replaceChildren(head);
 
-  if (event.list_summary) panel.append(section("목록 요약", el("div", "kv", event.list_summary)));
-
   if (event.summary) {
-    panel.append(...summaryNodes(event.summary));
+    if (event.summary.block_found === false) {
+      panel.append(el("div", "notice", "배너에서 참여 대상 정보를 찾지 못했습니다. 원문을 확인하세요."));
+    }
+    panel.append(summaryCards(event.summary));
+    if (event.summary.analysis) {
+      const reason = el("details", "reason");
+      reason.append(el("summary", null, "판단 근거"), el("div", "kv", event.summary.analysis));
+      panel.append(reason);
+    }
   } else {
-    panel.append(section("요약", el("div", "dim", "요약 전 — 에이전트에게 이벤트를 물으면 채워집니다")));
+    panel.append(el("div", "notice", "아직 분석 전입니다 — 에이전트에게 이 이벤트를 물으면 배너를 읽어 채웁니다."));
   }
 
   const image = event.image;
