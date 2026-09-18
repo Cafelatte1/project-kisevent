@@ -45,7 +45,7 @@ curl http://127.0.0.1:4000/api/health
 claude mcp add --transport http --scope user kis-event http://127.0.0.1:4000/mcp
 ```
 확인: Claude Code에서 `/mcp` → `kis-event` 연결됨, tool 7개.
-서버 이름은 반드시 `kis-event`여야 한다. `.claude/agents/banner-summarizer.md`(배너 요약 서브에이전트)가 `mcp__kis-event__get_summary_tiles`·`mcp__kis-event__save_summary` 이름으로 도구를 찾기 때문이다.
+서버 이름은 반드시 `kis-event`여야 한다. `.claude/agents/event-analyzer.md`(배너 요약 서브에이전트)가 `mcp__kis-event__get_summary_tiles`·`mcp__kis-event__save_summary` 이름으로 도구를 찾기 때문이다.
 
 ## 5. Claude Desktop 연결
 Claude Desktop은 localhost HTTP 커넥터를 받지 않을 수 있으므로 stdio로 등록한다. stdio 진입점은 서버 없이 같은 DB를 읽으므로 3단계 서버가 꺼져 있어도 조회는 된다(수집과 `sync_now`는 서버가 한다).
@@ -65,7 +65,7 @@ Claude Desktop은 localhost HTTP 커넥터를 받지 않을 수 있으므로 std
 
 ## 6. 최종 검증
 1. 브라우저에서 `http://127.0.0.1:4000` — 진행중 이벤트 수가 0이 아니다.
-2. Claude Code 또는 Desktop에서: "현재 뱅키스 고객대상 이벤트 뭐가 있어?" — 처음엔 미요약 배너를 먼저 요약(Claude Code는 `banner-summarizer` 서브에이전트를 이미지마다 병렬로 띄움)한 뒤 목록을 답한다. 진행중 30여 건 기준 몇 분 걸린다.
+2. Claude Code 또는 Desktop에서: "현재 뱅키스 고객대상 이벤트 뭐가 있어?" — 처음엔 미요약 배너를 먼저 요약(Claude Code는 `event-analyzer` 서브에이전트를 이미지마다 병렬로 띄움)한 뒤 목록을 답한다. 진행중 30여 건 기준 몇 분 걸린다.
 3. 대시보드의 "요약 완료" 수가 올라간다.
 
 ## 7. 문제가 생기면

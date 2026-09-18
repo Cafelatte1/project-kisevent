@@ -1,5 +1,5 @@
 ---
-name: banner-summarizer
+name: event-analyzer
 description: 한투 이벤트 배너 이미지 1장을 읽어 기간·대상·기준을 schema_version 2로 요약하고 MCP save_summary로 저장한다. 미요약 이미지가 N개면 image_id를 하나씩 넘겨 N개를 병렬로 띄운다. 건당 이미지 1장이라 부담이 없다.
 tools: mcp__kis-event__get_summary_tiles, mcp__kis-event__save_summary
 model: sonnet

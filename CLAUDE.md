@@ -5,7 +5,7 @@
 ## 프로젝트
 
 KIS Event: 한국투자증권 이벤트 공고(영업점·뱅키스 고객대상)를 15분 주기로 스크랩해 SQLite에 쌓고, Claude Desktop이 MCP로 붙어 "지금 영업점 고객대상 이벤트가 뭐가 있어?"에 답하는 로컬 개인용 서비스.
-이벤트 내용은 거의 전부 세로 7k~30k px 배너 이미지 안에 있다. 분석은 **요약 v2** 하나다: 배너 상단 정보 블록 구간(y 1,200~3,600) 1장을 MCP로 넘기면 에이전트가 `analysis(추론) → target(영업점·뱅키스·연금 중 해당 전부) → criteria(상품·계좌·실적 등 기타)`를 `image_summary`에 저장한다. 신청 기간은 목록에 있으므로 뽑지 않고, 3,600px 아래 내용(혜택 상세·유의사항)은 다루지 않는다. 영업점/뱅키스 구분은 목록 탭이 아니라 이 요약에서만 나오며(연금 이벤트가 두 탭에 같이 실리는 편향 때문), 요약 전 이벤트는 "미상"이다. 에이전트는 미요약 이미지가 있으면 답하기 전에 요약을 먼저 마치고, Claude Code에서는 `.claude/agents/banner-summarizer.md`를 image_id마다 병렬로 띄운다. 사이트 구조·템플릿 분류·크롭 범위·스키마의 근거는 `docs/event-page-research.md`를 따른다(§6의 여백 행 타일·전체 전사는 폐기된 v1 기록이다).
+이벤트 내용은 거의 전부 세로 7k~30k px 배너 이미지 안에 있다. 분석은 **요약 v2** 하나다: 배너 상단 정보 블록 구간(y 1,200~3,600) 1장을 MCP로 넘기면 에이전트가 `analysis(추론) → target(영업점·뱅키스·연금 중 해당 전부) → criteria(상품·계좌·실적 등 기타)`를 `image_summary`에 저장한다. 신청 기간은 목록에 있으므로 뽑지 않고, 3,600px 아래 내용(혜택 상세·유의사항)은 다루지 않는다. 영업점/뱅키스 구분은 목록 탭이 아니라 이 요약에서만 나오며(연금 이벤트가 두 탭에 같이 실리는 편향 때문), 요약 전 이벤트는 "미상"이다. 에이전트는 미요약 이미지가 있으면 답하기 전에 요약을 먼저 마치고, Claude Code에서는 `.claude/agents/event-analyzer.md`를 image_id마다 병렬로 띄운다. 사이트 구조·템플릿 분류·크롭 범위·스키마의 근거는 `docs/event-page-research.md`를 따른다(§6의 여백 행 타일·전체 전사는 폐기된 v1 기록이다).
 스크랩은 로그인·JS 실행 없는 GET + HTML 파싱이며, 고객 탭은 `CUSTGUBUN=00`(전체) 하나만 읽는다(00 = 영업점∪뱅키스, 00에만 있는 이벤트 없음). 목록은 `currentPage`를 빈 페이지까지 순회(`MAX_PAGES=20`)하고 `#ifrmContent`가 없는 구형 템플릿은 `<!--b:s-->…<!--b:e-->` 구간으로 폴백한다. 이미지는 URL 또는 sha256이 바뀔 때만 다시 받고 다시 요약한다.
 동기화는 두 모드다. `live`(15분, 진행중 탭 `gubun=i`)는 이번에 안 보인 이벤트를 `state='ended'`로 내리고, `backfill`(지난 이벤트 탭 `gubun=t`, `BACKFILL_LIMIT` 기본 100건·0이면 전체, 대시보드 버튼으로만 실행하며 없어도 무방)은 매번 1페이지부터 건수가 찰 때까지 돌되 이미 아는 번호는 상세·이미지를 건너뛰고 `ongoing`을 내리지 않는다. 사람이 보는 화면은 3페이지지만 직접 GET은 2016년까지 전부 나온다(2026-09-17 기준 1,250건). 종료 이벤트 상세는 `gubun=t`로 열어야 이미지가 나온다(`events.seen_tab`). 실행 게이트는 `crawl.py` 하나다: 동시 실행 409, 스케줄러가 아닌 요청(대시보드·MCP)은 마지막 실행 시작 60초 이내면 429.
 
@@ -15,7 +15,7 @@ KIS Event: 한국투자증권 이벤트 공고(영업점·뱅키스 고객대상
   - `core/` — `scraper.py`(목록·상세 파싱, 이미지 저장, live/backfill), `db.py`(sqlite3 WAL, 스키마·마이그레이션), `tiles.py`(요약용 고정 크롭·JPEG 렌더), `crawl.py`(실행 게이트·상태), `scheduler.py`(APScheduler 15분), `queries.py`(REST·MCP 공용 조회)
   - `api/` — FastAPI REST(`/api/*`)와 `frontend/` 정적 서빙
   - `mcp/` — `server.py`에 tool 정의: 수집 `sync_now`(live만, 완료까지 기다렸다 new/updated를 돌려줌, 에이전트는 대화의 첫 조회 전에 한 번 부름; 백필은 대시보드 전용), 조회 `list_events`·`events_on`(일자별 JSON, 미요약 안내 포함)·`get_event`, 요약 `list_pending_summaries`·`get_summary_tiles`·`save_summary`. `schema.py`에 v2 pydantic과 에이전트용 안내문. `/mcp`에 Streamable HTTP로 노출하고 `stdio.py`는 같은 서버를 stdio로 띄우는 진입점(스케줄러 없이 같은 DB만 읽고, `sync_now`는 서버 REST `POST /api/scrape`에 위임해 실행 게이트를 공유한다)
-- `.claude/agents/banner-summarizer.md` — 배너 1장을 요약하는 Sonnet 서브에이전트(도구는 `get_summary_tiles`·`save_summary`뿐). MCP 서버 이름을 `kis-event`로 등록해야 도구 이름이 맞는다
+- `.claude/agents/event-analyzer.md` — 배너 1장을 요약하는 Sonnet 서브에이전트(도구는 `get_summary_tiles`·`save_summary`뿐). MCP 서버 이름을 `kis-event`로 등록해야 도구 이름이 맞는다
   - `main.py` — 앱 조립과 기동
 - `frontend/index.html` — 빌드 없는 단일 파일 상태판: 마지막 수집 n분 전, 주기 두 배를 넘기면 중단 경고, 진행중·요약 전·대상별 타일, 이벤트 표(대상·기간·요약)와 상세, 변화가 있었던 수집 이력. 버튼은 백필 하나뿐이고 라이브 동기화는 MCP `sync_now`로 한다
 - `data/` — `events.db`, `images/`(원본 배너). 커밋하지 않는다. `KISEVENT_DATA_DIR`로 옮길 수 있다
