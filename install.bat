@@ -1,9 +1,28 @@
 @echo off
 chcp 65001 >nul
 setlocal
-cd /d %~dp0
-set "REPO=%~dp0"
-set "REPO=%REPO:~0,-1%"
+set "GIT_URL=https://github.com/Cafelatte1/project-kisevent"
+
+rem 0. repo: run from inside a clone, or clone into %USERPROFILE%\project-kisevent
+if exist "%~dp0pyproject.toml" (
+    for %%i in ("%~dp0.") do set "REPO=%%~fi"
+    goto :have_repo
+)
+set "REPO=%USERPROFILE%\project-kisevent"
+where git >nul 2>&1 || (
+    echo [0/4] git 설치 중 (winget)...
+    winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements || goto :fail
+    set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
+)
+if exist "%REPO%\.git" (
+    echo [0/4] 레포 갱신: %REPO%
+    git -C "%REPO%" pull --ff-only || goto :fail
+) else (
+    echo [0/4] 레포 클론: %REPO%
+    git clone "%GIT_URL%" "%REPO%" || goto :fail
+)
+:have_repo
+cd /d "%REPO%"
 echo === KIS Event install (%REPO%) ===
 echo.
 
