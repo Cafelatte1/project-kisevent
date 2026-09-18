@@ -1,21 +1,21 @@
 # KIS Event
 
-한국투자증권 이벤트 공고를 수집해 SQLite에 쌓고, AI 에이전트가 MCP로 붙어 "지금 영업점 고객대상 이벤트 뭐 있어?"에 답하는 로컬 개인용 서비스. 이벤트 내용은 배너 이미지 안에 있어 에이전트가 이미지를 읽어 대상·기준을 요약한 뒤 답한다.
+A local, single-user service that collects Korea Investment & Securities (한국투자증권) event notices into SQLite and lets an AI agent answer "which events are open to branch customers right now?" over MCP. Event content lives inside banner images, so the agent reads the image, summarizes the target customers and criteria, and then answers.
 
-- 설치·연결: `SETUP.md` (에이전트에게 "셋팅해줘"라고 하면 그대로 수행)
-- 대시보드(상태판): http://127.0.0.1:4000
-- MCP: HTTP `http://127.0.0.1:4000/mcp` (Claude Code는 `.mcp.json` 자동 인식), Claude Desktop은 stdio
-- 에이전트 안내: Claude는 `CLAUDE.md`, Codex는 `AGENTS.md`. 설계 근거: `docs/event-page-research.md`
+- Install and connect: `SETUP.md` (Korean; tell the agent "셋팅해줘" and it follows the document)
+- Dashboard (status board): http://127.0.0.1:4000
+- MCP: HTTP `http://127.0.0.1:4000/mcp` (Claude Code picks it up from `.mcp.json`); Claude Desktop uses stdio
+- Agent guidance: `CLAUDE.md` for Claude, `AGENTS.md` for Codex. Design rationale: `docs/event-page-research.md` (Korean)
 
-## 에이전트 모델 요구 사양
+## Agent model requirements
 
-역할이 둘이다.
-- **메인 세션** — 사용자 질문을 받아 `sync_now → 조회 → (미요약이면 분석 지시) → 답변` 흐름을 지휘한다.
-- **서브에이전트 `event-analyzer`** — 배너 1장을 읽어 대상·기준 JSON을 만들고 저장한다. Claude Code에서는 `.claude/agents/event-analyzer.md`, Codex에서는 `~/.codex/agents/event-analyzer.toml`(레포 `.codex/agents/`에서 복사)이 미요약 이미지 2장씩을 맡아 병렬로 뜬다. 서브에이전트가 없는 환경(Claude Desktop)에서는 메인 세션이 같은 일을 직접 한다.
+There are two roles.
+- **Main session** — takes the user's question and drives the flow `sync_now → query → (dispatch analysis if anything is unsummarized) → answer`.
+- **Subagent `event-analyzer`** — reads a banner and saves the target/criteria JSON. In Claude Code it is `.claude/agents/event-analyzer.md`; in Codex it is `~/.codex/agents/event-analyzer.toml` (copied from this repo's `.codex/agents/`). Each instance handles two unsummarized images and the instances run in parallel. Where no subagents exist (Claude Desktop) the main session does the same work itself.
 
-| | 서브에이전트 (`event-analyzer`) | 메인 세션 |
+| | Subagent (`event-analyzer`) | Main session |
 |---|---|---|
-| **Claude** 최소 / 권장 | Sonnet low / Sonnet medium | Sonnet medium / Sonnet high |
-| **GPT** (`gpt-5.6-luna`) 최소 / 권장 | Luna medium / Luna high | Luna high / Luna xhigh |
+| **Claude** minimum / recommended | Sonnet low / Sonnet medium | Sonnet medium / Sonnet high |
+| **GPT** (`gpt-5.6-luna`) minimum / recommended | Luna medium / Luna high | Luna high / Luna xhigh |
 
-기본 설정은 Claude 서브에이전트 Sonnet medium(`effort: medium`), Codex 서브에이전트 Luna high이며, 진행중 33건 + 종료 20건 검증에서 정보 블록 인식 53/53, 대상 판정 오류 0이었다(`docs/event-page-research.md` §8).
+Defaults are Sonnet medium (`effort: medium`) for the Claude subagent and Luna high for the Codex one. In a check over 33 ongoing and 20 ended banners the info block was found in 53/53 and no target was misjudged (`docs/event-page-research.md` §8).

@@ -74,7 +74,8 @@ class SummaryV2(BaseModel):
     def _block_requires_target(self) -> "SummaryV2":
         if self.block_found and not self.target.text.strip():
             raise ValueError(
-                "block_found가 true면 target.text(참여대상 문구 원문, 예: 'BanKIS 주식계좌 보유 고객')가 필요합니다"
+                "target.text is required when block_found is true"
+                " (the eligible-customer wording as printed, e.g. 'BanKIS 주식계좌 보유 고객')"
             )
         # 세 필드가 다 비면 기준 없음으로 본다.
         if self.criteria is not None and self.criteria.empty:
@@ -82,11 +83,11 @@ class SummaryV2(BaseModel):
         return self
 
 
-SUMMARY_GUIDE = """[schema_version 2 요약 안내]
-- 타일은 배너 상단의 정보 블록 구간(제목 아래 ~ 첫 이벤트 섹션)이다. 제목은 이미지에 없을 수 있으니 목록 title을 참고한다. 라벨은 '이벤트 기간/참가 신청/대회 기간', '참여대상/이벤트 대상/대상 고객/참가 대상' 등으로 흔들리니 라벨이 아니라 내용으로 판단한다.
-- 쓰는 순서: analysis → block_found → target → criteria. 관찰을 먼저 적고, 블록 유무를 판정한 뒤, 찾았을 때만 추출한다.
-- analysis: 이미지 자체를 서술한다 — 어떤 라벨과 문구(기간·대상·조건·해시태그·회색 소문)가 어디에 보이는지 2~5문장. 판단이 아니라 관찰을 적는다.
-- block_found: 기간·대상 정보 블록이 보이면 true. 안 보이거나 잘려 있으면 false로 두고 target·criteria는 쓰지 않는다(추측 금지).
-- target.types: 영업점|뱅키스|연금 중 해당하는 것 전부(둘 다면 둘 다). 제목과 이미지 문구만으로 판단한다('BanKIS 주식계좌 보유 고객'→뱅키스, '영업점 개인고객'→영업점, 'DC·IRP·개인연금 계좌'→연금, '영업점, BanKIS 계좌 모두 가능'→영업점+뱅키스). 판단할 문구가 없으면 빈 배열. 해시태그·회색 소문·칩은 conditions와 exclusions로 나눈다.
-- criteria: 대상 상품/계좌/종목/시장·실적 인정·이미지에만 있는 부가 기간(자산유지·자격판정·대회 기간)·그 밖의 조건을 text 한 필드에 담고, products와 performance는 있을 때만 채운다. '참여조건' 라벨은 내용에 따라 자격→target.conditions, 절차·실적→criteria.performance, 상품→criteria.products. 아무것도 없으면 criteria는 null.
-- 형식(키 이름·순서 그대로): {"analysis": str, "block_found": bool, "target": {"types": [...], "text": str, "conditions": [str], "exclusions": [str]}, "criteria": {"text": str, "products": [str], "performance": str|null} | null}"""
+SUMMARY_GUIDE = """[Summary guide, schema_version 2]
+- The image is the info-block region of the banner (below the title, above the first event section). The title may be absent from the image; use the list title. Labels vary ('이벤트 기간/참가 신청/대회 기간', '참여대상/이벤트 대상/대상 고객/참가 대상' ...), so judge by content, not by label.
+- Write in this order: analysis → block_found → target → criteria. Observe first, decide whether the block is there, and extract only if it is.
+- analysis: describe the image itself — which labels and phrases (period, eligibility, conditions, hashtags, small grey print) appear and where, in 2–5 sentences. Observation, not judgement.
+- block_found: true if the period/eligibility info block is visible. If it is missing or cut off, set false and do not write target or criteria (never guess).
+- target.types: every applicable group among 영업점 (branch), 뱅키스 (BanKIS online), 연금 (pension) — both if both. Judge from the title and the image wording only ('BanKIS 주식계좌 보유 고객' → 뱅키스, '영업점 개인고객' → 영업점, 'DC·IRP·개인연금 계좌' → 연금, '영업점, BanKIS 계좌 모두 가능' → 영업점 + 뱅키스). Empty array if nothing decides it. Split hashtags, grey print and chips into conditions and exclusions. Keep target.text and the list items in Korean as printed.
+- criteria: put target products/accounts/instruments/markets, performance criteria, extra periods that exist only in the image (asset-holding, qualification, contest periods) and any other condition into text; fill products and performance only when present. A '참여조건' label goes by content: eligibility → target.conditions, procedure/performance → criteria.performance, product → criteria.products. criteria is null when there is nothing.
+- Format (keys and order exactly): {"analysis": str, "block_found": bool, "target": {"types": [...], "text": str, "conditions": [str], "exclusions": [str]}, "criteria": {"text": str, "products": [str], "performance": str|null} | null}"""

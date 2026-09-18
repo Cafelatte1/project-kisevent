@@ -118,7 +118,7 @@ def test_events_on_tool_returns_dict_with_notice_and_pending(conn):
     result = server.events_on("2026-09-17", "영업점")
 
     assert result["date"] == "2026-09-17" and result["target"] == "영업점"
-    assert "1건 미요약" in result["notice"] and "200" in result["notice"]
+    assert "1 of 2" in result["notice"] and "200" in result["notice"]
     assert result["count"] == 2
     assert result["pending_summaries"] == 1 and result["pending_event_nums"] == ["200"]
     assert [event["num"] for event in result["events"]] == ["200", "300"]
