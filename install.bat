@@ -10,7 +10,7 @@ if exist "%~dp0pyproject.toml" (
 )
 set "REPO=%USERPROFILE%\project-kisevent"
 where git >nul 2>&1 || (
-    echo [0/4] git 설치 중 (winget)...
+    echo [0/4] git 설치 중 - winget...
     winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements || goto :fail
     set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
 )
@@ -45,7 +45,10 @@ echo [2/4] 의존성 설치 (uv sync)...
 
 rem 3. server on logon (Task Scheduler) + start now
 echo [3/4] 서버 자동 실행 등록 (작업 스케줄러 KISEvent)...
-schtasks /Create /F /SC ONLOGON /TN "KISEvent" /TR "wscript.exe \"%REPO%\run-hidden.vbs\"" >nul || goto :fail
+schtasks /Create /F /SC ONLOGON /TN "KISEvent" /TR "wscript.exe \"%REPO%\run-hidden.vbs\"" >nul || (
+    echo 작업 스케줄러 등록 실패. install.bat을 마우스 오른쪽 - "관리자 권한으로 실행"으로 다시 실행해 보세요.
+    goto :fail
+)
 schtasks /Run /TN "KISEvent" >nul || goto :fail
 
 rem 4. Claude Desktop config (merge kis-event into mcpServers, keep the rest)
