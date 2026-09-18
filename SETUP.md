@@ -1,6 +1,8 @@
 # SETUP.md — 서빙 PC 설치 안내 (AI 에이전트용)
 
-이 문서는 사용자가 "이 레포를 클론했어. MCP 서버 쓸 수 있게 셋팅해줘"라고 했을 때 AI 에이전트(Claude Code 또는 Claude Desktop)가 그대로 따라 하는 절차다. 사용자는 개발자가 아니므로 명령 실행·설정 파일 편집·검증을 전부 에이전트가 한다. 기본 환경은 Windows 10/11이며, macOS는 마지막 절에 차이만 적었다.
+이 문서는 사용자가 "이 레포를 클론했어. MCP 서버 쓸 수 있게 셋팅해줘"라고 했을 때 AI 에이전트(Claude Code 또는 Claude Desktop)가 그대로 따라 하는 절차다. 사용자는 개발자가 아니므로 명령 실행·설정 파일 편집·검증을 전부 에이전트가 한다.
+
+**명령을 직접 실행할 수 없는 에이전트(Claude Desktop 채팅)라면**: 각 단계의 명령을 사용자가 PowerShell에 붙여 넣도록 한 번에 하나씩 보여 주고, 출력 결과를 받아 확인한 뒤 다음 단계로 간다. PowerShell은 시작 메뉴에서 "PowerShell"을 검색해 연다. 설정 파일(5단계)은 완성된 JSON 전체를 보여 주고 메모장으로 저장하게 한다. `<REPO>`·`<USER>` 자리는 사용자에게 경로를 물어 실제 값으로 바꿔서 보여 준다. 기본 환경은 Windows 10/11이며, macOS는 마지막 절에 차이만 적었다.
 
 완료 기준: (1) 서버가 로그온 때마다 자동으로 떠서 `http://127.0.0.1:4000`에 대시보드가 열리고, (2) Claude Code·Claude Desktop(그리고 쓰면 Codex)에서 `kis-event` MCP 서버의 tool 7개가 보이며, (3) "지금 뱅키스 이벤트 뭐 있어?"에 답이 나온다.
 
@@ -63,6 +65,8 @@ Claude Desktop은 localhost HTTP 커넥터를 받지 않을 수 있으므로 std
 `command`는 `uv`가 아니라 `uv.exe` 절대경로를 쓴다(Desktop은 PATH를 못 볼 수 있다). 저장 후 Claude Desktop을 완전히 종료(트레이 아이콘까지)하고 다시 연다. 새 대화에서 도구 아이콘에 `kis-event`가 보이면 된다.
 설정 > 커넥터에서 커스텀 커넥터로 `http://127.0.0.1:4000/mcp`가 등록되면 그것도 된다(둘 중 하나면 충분).
 
+Desktop에는 서브에이전트가 없어 배너 요약을 메인 대화가 한 장씩 순서대로 한다. 첫 질문 때 진행중 30여 장을 요약하므로 5~10분 걸리고 도구 호출이 수십 번 이어진다 — 정상이다. 중간에 멈추면 "이어서 요약해줘"라고 하면 남은 것부터 이어서 한다.
+
 ## 5-1. Codex / ChatGPT 앱(GPT) 연결
 Codex CLI(또는 ChatGPT 데스크톱 앱의 Codex)는 사용자 설정(`%USERPROFILE%\.codex\config.toml`, macOS `~/.codex/config.toml`)에 MCP 서버를 등록한다. 3단계 서버가 떠 있어야 한다.
 ```powershell
@@ -80,7 +84,7 @@ Copy-Item "<REPO>\.codex\agents\event-analyzer.toml" "$env:USERPROFILE\.codex\ag
 
 ## 6. 최종 검증
 1. 브라우저에서 `http://127.0.0.1:4000` — 상태판이 뜬다(첫 질문 전이라 '아직 수집 없음'이 정상).
-2. Claude Code / Desktop / Codex에서: "현재 뱅키스 고객대상 이벤트 뭐가 있어?" — `sync_now`로 수집한 뒤 미요약 배너를 먼저 요약(Claude Code·Codex는 `event-analyzer` 서브에이전트를 이미지 2장씩 병렬로 띄움)한 뒤 목록을 답한다. 진행중 30여 건 기준 몇 분 걸린다.
+2. Claude Code / Desktop / Codex에서: "현재 뱅키스 고객대상 이벤트 뭐가 있어?" — `sync_now`로 수집한 뒤 미요약 배너를 먼저 요약(Claude Code·Codex는 `event-analyzer` 서브에이전트를 이미지 2장씩 병렬로, Desktop은 메인 대화가 한 장씩 순서대로)한 뒤 목록을 답한다. 진행중 30여 건 기준 Code·Codex는 1~2분, Desktop은 5~10분 걸린다.
 3. 대시보드 헤더가 'n분 전 수집 - 진행중 34건, 신규 34…'로 바뀌고 진행중 이벤트가 채워진다.
 
 ## 7. 문제가 생기면
@@ -91,6 +95,8 @@ Copy-Item "<REPO>\.codex\agents\event-analyzer.toml" "$env:USERPROFILE\.codex\ag
 | Claude Desktop에 서버가 안 보임 | JSON 문법(쉼표·`\\`), `uv.exe` 경로 존재, Desktop 완전 재시작. `Developer > Open MCP Log`에서 오류 확인 |
 | 서브에이전트가 도구를 못 찾음 | MCP 서버 이름이 `kis-event`인지(`claude mcp list`) |
 | 수집은 되는데 대상이 전부 "미상" | 정상. 대상은 배너 요약에서 나오므로 에이전트에게 요약을 시키면 채워진다 |
+| Desktop에서 `sync_now`가 "server … is not running" | 3단계 서버가 꺼진 것. `run.bat`을 실행하거나 `schtasks /Run /TN KISEvent` 후 다시 질문 |
+| Desktop이 요약 도중 멈춤 | "이어서 요약해줘" — 남은 이미지부터 이어서 한다(30분 지난 미완료 건은 자동으로 다시 열린다) |
 | 한글 로그가 깨짐 | 서버는 UTF-8로 강제하므로 콘솔 문제. `chcp 65001` 후 다시 본다 |
 
 ## macOS(개발 PC)에서의 차이

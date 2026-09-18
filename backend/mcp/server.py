@@ -26,7 +26,9 @@ INSTRUCTIONS = (
     " batches from the sync_now response (or list_pending_summaries) → where subagents are available"
     " (Claude Code, Codex) spawn one event-analyzer per batch, all at once. The main session must not call"
     " get_summary_tiles itself and work through images sequentially; the only exception is Claude Desktop,"
-    " which has no subagents → query again and answer. Do not call sync_now again in the same conversation."
+    " which has no subagents: there, run get_summary_tiles → save_summary per image_id in order until"
+    " batches is empty (a first run may cover ~30 images — keep going; if interrupted, resume from"
+    " list_pending_summaries) → query again and answer. Do not call sync_now again in the same conversation."
 )
 
 mcp = MCPServer("kis-event", instructions=INSTRUCTIONS)
@@ -159,7 +161,7 @@ async def _wait_idle(get_snapshot) -> dict:
 @mcp.tool()
 @_logged
 async def sync_now() -> dict:
-    """Re-collect the list of ongoing events now (live sync). Call it once before the first event query of a conversation. It waits for the collection to finish (usually ~5s) and returns the result, so call list_events/events_on right after. When synced is true you get new (new events), updated (changed events) and batches: the unsummarized image_ids of ongoing events, pre-split into groups of two. If batches is not empty, finish the summaries before querying by following next — spawn one event-analyzer subagent per batch in parallel (the main session does not call get_summary_tiles itself). retry_after_sec means the last collection was under a minute ago, so the data is already fresh: just query. already_running means another collection is in progress: query a few seconds later. Do not call it again in the same conversation. Backfilling past events is done only from the dashboard."""
+    """Re-collect the list of ongoing events now (live sync). Call it once before the first event query of a conversation. It waits for the collection to finish (usually ~5s) and returns the result, so call list_events/events_on right after. When synced is true you get new (new events), updated (changed events) and batches: the unsummarized image_ids of ongoing events, pre-split into groups of two. If batches is not empty, finish the summaries before querying by following next — spawn one event-analyzer subagent per batch in parallel (the main session does not call get_summary_tiles itself; on Claude Desktop, which has no subagents, run get_summary_tiles → save_summary per image_id in order until batches is empty). retry_after_sec means the last collection was under a minute ago, so the data is already fresh: just query. already_running means another collection is in progress: query a few seconds later. Do not call it again in the same conversation. Backfilling past events is done only from the dashboard."""
     if SYNC_VIA_HTTP:
         async with httpx.AsyncClient(base_url=SERVER_URL, timeout=10.0) as client:
             try:
