@@ -6,32 +6,17 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from loguru import logger
 
-from backend.core import crawl, db
+from backend.core import crawl
 
 SCRAPE_INTERVAL_MIN = int(os.environ.get("SCRAPE_INTERVAL_MIN", "15"))
 
 _scheduler: BackgroundScheduler | None = None
-_backfill_checked = False
 
 
 def _publish_next_run() -> None:
     job = _scheduler.get_job("scrape") if _scheduler is not None else None
     next_run = job.next_run_time if job is not None else None
     crawl.set_next_run(next_run.isoformat() if next_run is not None else None)
-
-
-def _backfill_done() -> bool:
-    conn = db.connect()
-    try:
-        return (
-            conn.execute(
-                "SELECT 1 FROM scrape_runs WHERE mode = 'backfill' AND finished_at IS NOT NULL"
-                " AND error IS NULL LIMIT 1"
-            ).fetchone()
-            is not None
-        )
-    finally:
-        conn.close()
 
 
 def _live_job() -> None:
@@ -42,18 +27,10 @@ def _live_job() -> None:
     finally:
         _publish_next_run()
 
-    global _backfill_checked
-    if not _backfill_checked:
-        _backfill_checked = True
-        if not _backfill_done():
-            log.info("backfill auto-start reason=no_completed_backfill")
-            crawl.start_background("backfill", trigger="scheduler")
-
 
 def start() -> BackgroundScheduler:
-    global _scheduler, _backfill_checked
+    global _scheduler
 
-    _backfill_checked = False
     _scheduler = BackgroundScheduler()
     _scheduler.add_job(
         _live_job,
