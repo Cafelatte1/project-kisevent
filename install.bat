@@ -9,11 +9,7 @@ if exist "%~dp0pyproject.toml" (
     goto :have_repo
 )
 set "REPO=%USERPROFILE%\project-kisevent"
-where git >nul 2>&1 || (
-    echo [0/4] git 설치 중 - winget...
-    winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements || goto :fail
-    set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
-)
+where git >nul 2>&1 || call :install_git || goto :fail
 if exist "%REPO%\.git" (
     echo [0/4] 레포 갱신: %REPO%
     git -C "%REPO%" pull --ff-only || goto :fail
@@ -89,3 +85,19 @@ echo.
 echo === 설치 실패 === 위 오류를 확인하세요.
 pause
 exit /b 1
+
+rem --- git: try winget, otherwise download the official Git for Windows installer and run it silently ---
+:install_git
+if exist "%ProgramFiles%\Git\cmd\git.exe" goto :git_ok
+echo [0/4] git 설치 중 - winget...
+where winget >nul 2>&1 && winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements
+if exist "%ProgramFiles%\Git\cmd\git.exe" goto :git_ok
+echo [0/4] winget 실패 - git-scm.com 설치 파일을 직접 받아 설치합니다 (UAC 창이 뜨면 '예')...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$a = (irm https://api.github.com/repos/git-for-windows/git/releases/latest).assets | ? { $_.name -match '^Git-.*-64-bit\.exe$' } | select -First 1;" ^
+  "$f = Join-Path $env:TEMP $a.name; iwr $a.browser_download_url -OutFile $f;" ^
+  "Start-Process $f -ArgumentList '/VERYSILENT','/NORESTART' -Wait" || exit /b 1
+if not exist "%ProgramFiles%\Git\cmd\git.exe" echo git 설치 실패. https://git-scm.com/download/win 에서 직접 설치 후 다시 실행하세요. & exit /b 1
+:git_ok
+set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
+exit /b 0
