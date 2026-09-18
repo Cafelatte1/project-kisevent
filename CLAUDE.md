@@ -22,6 +22,7 @@ KIS Event: 한국투자증권 이벤트 공고(영업점·뱅키스 고객대상
 - 로그 — `backend/core/logging.py`(loguru). 파일은 `%LOCALAPPDATA%\kisevent\logs\app.log`(macOS `~/Library/Application Support/kisevent/logs/`), 10MB 롤링 5개. 포맷 `시각 | 레벨 | ctx | 모듈:줄 | 메시지`, ctx는 live/backfill/mcp/api/boot/tiles. 테이블은 `events`·`event_images`(status: pending|summarized|failed|superseded)·`image_summary`·`scrape_runs` 넷. uvicorn·httpx 표준 로깅은 여기로 합류하고 httpx 요청·access 로그는 DEBUG. 환경변수 `KISEVENT_LOG_DIR`, `KISEVENT_LOG_LEVEL`, `KISEVENT_FILE_LOG_LEVEL`, `KISEVENT_APP_DIR`. 수집 쪽은 `BACKFILL_LIMIT`(100)
 - `docs/event-page-research.md` — 사이트 실측 리서치와 설계 결정
 - `SETUP.md` — 서빙 PC(Windows, 비개발자) 설치 절차. 에이전트가 그대로 수행한다
+- `AGENTS.md` / `.codex/agents/event-analyzer.toml` — Codex(GPT)용 같은 흐름 안내와 서브에이전트(사용자 폴더 `~/.codex/agents/`로 복사해 쓴다)
 - `.mcp.json` — Claude Code가 이 폴더에서 `kis-event`(HTTP `/mcp`)를 자동 인식하게 하는 설정
 - `run.bat` / `run-hidden.vbs` — Windows: 4000 포트 점유 프로세스를 죽이고 서버 기동(vbs는 창 없이, 작업 스케줄러용). `run.sh` — macOS/Linux 동일 동작
 

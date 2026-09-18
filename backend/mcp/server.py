@@ -21,9 +21,9 @@ from backend.mcp.schema import SUMMARY_GUIDE, SUMMARY_SCHEMA_VERSION, SummaryV2
 INSTRUCTIONS = (
     "한국투자증권 이벤트 수집·요약 서버. 이벤트 내용은 배너 이미지 안에 있어, 질문에 답하기 전에 관련 이벤트의"
     " 배너가 요약돼 있어야 한다. 흐름: list_events 또는 events_on으로 대상 이벤트를 고른다 → 미요약이 있으면"
-    " list_pending_summaries로 image_id를 받는다 → Claude Code처럼 서브에이전트를 쓸 수 있으면 image_id를"
-    " 2개씩 묶어 묶음마다 event-analyzer를 병렬로 띄우고, 아니면 get_summary_tiles → save_summary를 직접"
-    " 순서대로 한다 →"
+    " list_pending_summaries로 image_id를 받는다(sync_now 응답의 batches로도 충분하다) → 서브에이전트를 쓸 수"
+    " 있는 환경(Claude Code·Codex)에서는 batches마다 event-analyzer를 하나씩, 전부 동시에 띄운다. 메인 세션이"
+    " get_summary_tiles를 직접 부르며 순차 처리하는 것은 금지이며, 서브에이전트가 없는 Claude Desktop만 예외다 →"
     " 다시 조회해 답한다. 대화에서 이벤트를 처음 조회하기 전에 sync_now를 한 번 불러 최신 목록을 받고"
     " 시작한다(완료까지 기다렸다 돌아오므로 바로 이어서 조회하면 된다). 같은 대화에서 다시 부를 필요는"
     " 없다."
@@ -36,6 +36,8 @@ mcp = MCPServer("kis-event", instructions=INSTRUCTIONS)
 SYNC_VIA_HTTP = False
 SERVER_URL = "http://127.0.0.1:4000"
 SYNC_WAIT_SEC = 60
+BATCH_SIZE = 2  # 서브에이전트 하나가 맡는 이미지 수
+SUBAGENT_NEXT = "묶음(batches)마다 event-analyzer 서브에이전트를 하나씩, 전부 동시에 띄워라. 메인 세션이 get_summary_tiles를 직접 부르지 않는다 — 서브에이전트를 쓸 수 없는 환경(Claude Desktop)에서만 image_id별로 get_summary_tiles → save_summary를 직접 한다."
 
 CLAIM_TIMEOUT_MIN = 30
 SUMMARY_QUALITY = 75
@@ -115,16 +117,28 @@ def _claim_cutoff() -> str:
     return (datetime.now(timezone.utc) - timedelta(minutes=CLAIM_TIMEOUT_MIN)).isoformat()
 
 
+def _ongoing_pending_plan() -> dict:
+    conn = db.connect()
+    try:
+        return _pending_plan(_pending_rows(conn, ongoing_only=True))
+    finally:
+        conn.close()
+
+
 def _sync_result(snapshot: dict) -> dict:
     if snapshot.get("last_error"):
         return {"synced": False, "error": snapshot["last_error"]}
     result = snapshot.get("last_result") or {}
+    plan = _ongoing_pending_plan()
     return {
         "synced": True,
         "events": result.get("events"),
         "new": result.get("new"),
         "updated": result.get("updated"),
         "finished_at": snapshot.get("last_finished_at"),
+        "pending_summaries": plan["pending"],
+        "batches": plan["batches"],
+        **({"next": plan["next"]} if "next" in plan else {}),
     }
 
 
@@ -141,7 +155,7 @@ async def _wait_idle(get_snapshot) -> dict:
 @mcp.tool()
 @_logged
 async def sync_now() -> dict:
-    """진행중 이벤트 목록을 지금 다시 수집한다(live 동기화). 대화에서 이벤트를 처음 조회하기 전에 한 번 부른다. 수집이 끝날 때까지 기다렸다가(보통 5초 안팎) 결과를 돌려주므로 바로 이어서 list_events/events_on을 호출하면 된다. synced가 true면 new(새 이벤트 수)·updated(바뀐 수)가 있고, retry_after_sec이 있으면 직전 수집이 1분 이내라 이미 최신이니 그냥 조회한다. already_running이면 다른 수집이 도는 중이니 몇 초 뒤 조회한다. 같은 대화에서 다시 부를 필요는 없다. 지난 이벤트 백필은 대시보드에서만 한다."""
+    """진행중 이벤트 목록을 지금 다시 수집한다(live 동기화). 대화에서 이벤트를 처음 조회하기 전에 한 번 부른다. 수집이 끝날 때까지 기다렸다가(보통 5초 안팎) 결과를 돌려주므로 바로 이어서 list_events/events_on을 호출하면 된다. synced가 true면 new(새 이벤트 수)·updated(바뀐 수)와 함께 진행중 이벤트의 미요약 image_id를 2개씩 묶은 batches가 온다 — batches가 비어 있지 않으면 조회하기 전에 next의 지시대로 묶음마다 event-analyzer 서브에이전트를 병렬로 띄워 요약을 끝낸다(메인 세션이 get_summary_tiles를 직접 부르지 않는다). retry_after_sec이 있으면 직전 수집이 1분 이내라 이미 최신이니 그냥 조회한다. already_running이면 다른 수집이 도는 중이니 몇 초 뒤 조회한다. 같은 대화에서 다시 부를 필요는 없다. 지난 이벤트 백필은 대시보드에서만 한다."""
     if SYNC_VIA_HTTP:
         async with httpx.AsyncClient(base_url=SERVER_URL, timeout=10.0) as client:
             try:
@@ -177,7 +191,7 @@ async def sync_now() -> dict:
 @mcp.tool()
 @_logged
 def list_events(target: str | None = None) -> dict:
-    """현재 진행 중인 한국투자증권 이벤트 목록. 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id를 2개씩 묶어 event-analyzer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접)."""
+    """현재 진행 중인 한국투자증권 이벤트 목록. 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(image_id를 2개씩 묶은 batches마다 event-analyzer 서브에이전트를 병렬로. 메인 세션이 직접 get_summary_tiles를 부르는 것은 서브에이전트가 없는 Claude Desktop만)."""
     conn = db.connect()
     try:
         return queries.list_events(conn, target)
@@ -188,7 +202,7 @@ def list_events(target: str | None = None) -> dict:
 @mcp.tool()
 @_logged
 def events_on(date: str, target: str | None = None) -> dict:
-    """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id를 2개씩 묶어 event-analyzer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
+    """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(image_id를 2개씩 묶은 batches마다 event-analyzer 서브에이전트를 병렬로. 메인 세션이 직접 get_summary_tiles를 부르는 것은 서브에이전트가 없는 Claude Desktop만). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
     conn = db.connect()
     try:
         events = queries.events_on(conn, date, target)
@@ -217,22 +231,40 @@ def events_on(date: str, target: str | None = None) -> dict:
     }
 
 
+def _pending_rows(conn, event_nums: list[str] | None = None, ongoing_only: bool = False) -> list:
+    sql = SUMMARY_CANDIDATE_SQL
+    params: tuple = (_claim_cutoff(),)
+    if event_nums:
+        marks = ",".join("?" * len(event_nums))
+        sql += f" AND i.event_num IN ({marks})"
+        params += tuple(event_nums)
+    if ongoing_only:
+        sql += " AND e.state = 'ongoing'"
+    return conn.execute(sql + SUMMARY_ORDER_SQL, params).fetchall()
+
+
+def _batches(image_ids: list[int]) -> list[list[int]]:
+    return [image_ids[i : i + BATCH_SIZE] for i in range(0, len(image_ids), BATCH_SIZE)]
+
+
+def _pending_plan(rows) -> dict:
+    """미요약 image_id를 서브에이전트 묶음으로 나눠 다음 행동까지 적어 준다."""
+    ids = [row["id"] for row in rows]
+    plan = {"pending": len(ids), "batches": _batches(ids)}
+    if ids:
+        plan["next"] = SUBAGENT_NEXT
+    return plan
+
+
 @mcp.tool()
 @_logged
 def list_pending_summaries(limit: int = 20, event_nums: list[str] | None = None) -> dict:
-    """요약되지 않은 배너 이미지 목록(image_id, event_num, title). 진행중 이벤트가 먼저, 그다음 종료일 내림차순. event_nums를 주면 그 이벤트들만. Claude Code라면 이 목록의 image_id를 2개씩 묶어 묶음마다 event-analyzer 서브에이전트를 하나씩 병렬로 띄워라(예: 5개 → 2·2·1로 3개). 서브에이전트를 쓸 수 없는 환경이면 get_summary_tiles → save_summary를 image_id별로 직접 순서대로 수행한다."""
+    """요약되지 않은 배너 이미지 목록(image_id, event_num, title)과, 그 image_id를 2개씩 묶은 batches. 진행중 이벤트가 먼저, 그다음 종료일 내림차순. event_nums를 주면 그 이벤트들만. batches마다 event-analyzer 서브에이전트를 하나씩 병렬로 띄워라(예: 5개 → [[a,b],[c,d],[e]] 3개). 메인 세션이 get_summary_tiles를 직접 부르는 것은 서브에이전트를 쓸 수 없는 환경(Claude Desktop)에서만이다."""
     conn = db.connect()
     try:
-        sql = SUMMARY_CANDIDATE_SQL
-        params: tuple = (_claim_cutoff(),)
-        if event_nums:
-            marks = ",".join("?" * len(event_nums))
-            sql += f" AND i.event_num IN ({marks})"
-            params += tuple(event_nums)
-
-        rows = conn.execute(sql + SUMMARY_ORDER_SQL, params).fetchall()
+        rows = _pending_rows(conn, event_nums)
         return {
-            "pending": len(rows),
+            **_pending_plan(rows),
             "items": [
                 {"image_id": row["id"], "event_num": row["event_num"], "title": row["title"]}
                 for row in rows[: max(1, limit)]
@@ -247,7 +279,7 @@ def list_pending_summaries(limit: int = 20, event_nums: list[str] | None = None)
 def get_summary_tiles(
     limit: int = 1, event_nums: list[str] | None = None, image_id: int | None = None
 ) -> list[ContentBlock]:
-    """미요약 배너 1장의 배너 상단 정보 블록 구간(y 1,200~3,600) 1장을 돌려준다. 정보 블록(이벤트 기간·참여대상, 있으면 대상 상품/계좌·실적 인정)은 히어로 이미지 바로 아래에 있다. 타일 앞의 텍스트에 image_id·이벤트 제목·목록 기간·목록 요약·요약 안내가 있으니 타일을 모두 읽고 schema_version 2 JSON을 save_summary로 저장하라. event_nums를 주면 그 이벤트들만, image_id를 주면 그 이미지만 돌려준다. 응답이 '요약할 이미지가 없습니다'면 끝난 것이다. image_id를 주면 이미 요약된 이미지도 다시 돌려준다(재요약)."""
+    """[event-analyzer 서브에이전트가 쓰는 도구. 메인 세션은 서브에이전트를 쓸 수 없는 환경에서만 직접 부른다] 미요약 배너 1장의 배너 상단 정보 블록 구간(y 1,200~3,600) 1장을 돌려준다. 정보 블록(이벤트 기간·참여대상, 있으면 대상 상품/계좌·실적 인정)은 히어로 이미지 바로 아래에 있다. 타일 앞의 텍스트에 image_id·이벤트 제목·목록 기간·목록 요약·요약 안내가 있으니 타일을 모두 읽고 schema_version 2 JSON을 save_summary로 저장하라. event_nums를 주면 그 이벤트들만, image_id를 주면 그 이미지만 돌려준다. 응답이 '요약할 이미지가 없습니다'면 끝난 것이다. image_id를 주면 이미 요약된 이미지도 다시 돌려준다(재요약)."""
     # limit은 1로 고정 취급한다 — 이미지 1장의 상단 크롭 1장이 한 호출이다(§7.4).
     conn = db.connect()
     try:

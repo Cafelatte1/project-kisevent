@@ -100,3 +100,8 @@ def test_http_sync_when_server_down(monkeypatch):
     monkeypatch.setattr(server.httpx, "AsyncClient", _mock_client(handler))
     result = asyncio.run(server.sync_now())
     assert result["synced"] is False and "꺼져" in result["error"]
+
+
+def test_batches_split_by_two():
+    assert server._batches([1, 2, 3, 4, 5]) == [[1, 2], [3, 4], [5]]
+    assert server._batches([]) == []

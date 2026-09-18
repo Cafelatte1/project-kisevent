@@ -2,7 +2,7 @@
 
 이 문서는 사용자가 "이 레포를 클론했어. MCP 서버 쓸 수 있게 셋팅해줘"라고 했을 때 AI 에이전트(Claude Code 또는 Claude Desktop)가 그대로 따라 하는 절차다. 사용자는 개발자가 아니므로 명령 실행·설정 파일 편집·검증을 전부 에이전트가 한다. 기본 환경은 Windows 10/11이며, macOS는 마지막 절에 차이만 적었다.
 
-완료 기준: (1) 서버가 로그온 때마다 자동으로 떠서 `http://127.0.0.1:4000`에 대시보드가 열리고, (2) Claude Code와 Claude Desktop 양쪽에서 `kis-event` MCP 서버의 tool 7개가 보이며, (3) "지금 뱅키스 이벤트 뭐 있어?"에 답이 나온다.
+완료 기준: (1) 서버가 로그온 때마다 자동으로 떠서 `http://127.0.0.1:4000`에 대시보드가 열리고, (2) Claude Code·Claude Desktop(그리고 쓰면 Codex)에서 `kis-event` MCP 서버의 tool 7개가 보이며, (3) "지금 뱅키스 이벤트 뭐 있어?"에 답이 나온다.
 
 ## 0. 확인할 것
 - 레포 경로를 절대경로로 잡는다. 아래에서 `<REPO>`는 예: `C:\Users\me\project-kisevent`.
@@ -63,9 +63,24 @@ Claude Desktop은 localhost HTTP 커넥터를 받지 않을 수 있으므로 std
 `command`는 `uv`가 아니라 `uv.exe` 절대경로를 쓴다(Desktop은 PATH를 못 볼 수 있다). 저장 후 Claude Desktop을 완전히 종료(트레이 아이콘까지)하고 다시 연다. 새 대화에서 도구 아이콘에 `kis-event`가 보이면 된다.
 설정 > 커넥터에서 커스텀 커넥터로 `http://127.0.0.1:4000/mcp`가 등록되면 그것도 된다(둘 중 하나면 충분).
 
+## 5-1. Codex / ChatGPT 앱(GPT) 연결
+Codex CLI(또는 ChatGPT 데스크톱 앱의 Codex)는 사용자 설정(`%USERPROFILE%\.codex\config.toml`, macOS `~/.codex/config.toml`)에 MCP 서버를 등록한다. 3단계 서버가 떠 있어야 한다.
+```powershell
+codex mcp add kis-event --url http://127.0.0.1:4000/mcp
+codex mcp list
+```
+배너 분석용 커스텀 에이전트는 사용자 폴더에 있어야 한다. 레포의 파일을 복사한다.
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\agents" | Out-Null
+Copy-Item "<REPO>\.codex\agents\event-analyzer.toml" "$env:USERPROFILE\.codex\agents\event-analyzer.toml"
+```
+(macOS: `mkdir -p ~/.codex/agents && cp <REPO>/.codex/agents/event-analyzer.toml ~/.codex/agents/`)
+레포 루트의 `AGENTS.md`가 Codex에게 질문 처리 흐름을 알려준다. 모델·추론 강도 권장값은 `README.md`의 표를 따른다(에이전트 파일의 `model`·`model_reasoning_effort`를 필요하면 맞춘다).
+확인: Codex를 `<REPO>`에서 열고 "현재 뱅키스 고객대상 이벤트 뭐 있어?" — `sync_now` 후 `event-analyzer`가 배너를 2장씩 요약하고 답한다.
+
 ## 6. 최종 검증
 1. 브라우저에서 `http://127.0.0.1:4000` — 상태판이 뜬다(첫 질문 전이라 '아직 수집 없음'이 정상).
-2. Claude Code 또는 Desktop에서: "현재 뱅키스 고객대상 이벤트 뭐가 있어?" — `sync_now`로 수집한 뒤 미요약 배너를 먼저 요약(Claude Code는 `event-analyzer` 서브에이전트를 이미지 2장씩 병렬로 띄움)한 뒤 목록을 답한다. 진행중 30여 건 기준 몇 분 걸린다.
+2. Claude Code / Desktop / Codex에서: "현재 뱅키스 고객대상 이벤트 뭐가 있어?" — `sync_now`로 수집한 뒤 미요약 배너를 먼저 요약(Claude Code·Codex는 `event-analyzer` 서브에이전트를 이미지 2장씩 병렬로 띄움)한 뒤 목록을 답한다. 진행중 30여 건 기준 몇 분 걸린다.
 3. 대시보드 헤더가 'n분 전 수집 - 진행중 34건, 신규 34…'로 바뀌고 진행중 이벤트가 채워진다.
 
 ## 7. 문제가 생기면
