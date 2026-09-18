@@ -1,5 +1,6 @@
 """Claude Desktop이 붙는 MCP tool 정의."""
 
+import asyncio
 import base64
 import functools
 import inspect
@@ -22,8 +23,9 @@ INSTRUCTIONS = (
     " 배너가 요약돼 있어야 한다. 흐름: list_events 또는 events_on으로 대상 이벤트를 고른다 → 미요약이 있으면"
     " list_pending_summaries로 image_id를 받는다 → Claude Code처럼 서브에이전트를 쓸 수 있으면 image_id마다"
     " banner-summarizer를 병렬로 띄우고, 아니면 get_summary_tiles → save_summary를 직접 순서대로 한다 →"
-    " 다시 조회해 답한다. 수집은 15분마다 자동이며, 사용자가 '지금'·'최신' 기준을 요구할 때만 sync_now를"
-    " 먼저 부르고 몇 초 뒤 조회한다."
+    " 다시 조회해 답한다. 대화에서 이벤트를 처음 조회하기 전에 sync_now를 한 번 불러 최신 목록을 받고"
+    " 시작한다(완료까지 기다렸다 돌아오므로 바로 이어서 조회하면 된다). 같은 대화에서 다시 부를 필요는"
+    " 없다."
 )
 
 mcp = MCPServer("kis-event", instructions=INSTRUCTIONS)
@@ -32,6 +34,7 @@ mcp = MCPServer("kis-event", instructions=INSTRUCTIONS)
 # 서버 REST에 위임한다(backend.mcp.stdio가 True로 바꾼다).
 SYNC_VIA_HTTP = False
 SERVER_URL = "http://127.0.0.1:4000"
+SYNC_WAIT_SEC = 60
 
 CLAIM_TIMEOUT_MIN = 30
 SUMMARY_QUALITY = 75
@@ -65,25 +68,40 @@ def _logged(func):
     """tool 호출 한 줄: 이름·핵심 인자·소요 시간."""
     signature = inspect.signature(func)
 
+    def _log(started: float, args, kwargs) -> None:
+        bound = signature.bind(*args, **kwargs)
+        bound.apply_defaults()
+        shown = " ".join(
+            f"{name}={bound.arguments[name]}"
+            for name in KEY_ARGS
+            if bound.arguments.get(name) is not None
+        )
+        log.info(
+            "tool={}{} elapsed={}s",
+            func.__name__,
+            f" {shown}" if shown else "",
+            round(time.monotonic() - started, 3),
+        )
+
+    if inspect.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            started = time.monotonic()
+            try:
+                return await func(*args, **kwargs)
+            finally:
+                _log(started, args, kwargs)
+
+        return async_wrapper
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         started = time.monotonic()
         try:
             return func(*args, **kwargs)
         finally:
-            bound = signature.bind(*args, **kwargs)
-            bound.apply_defaults()
-            shown = " ".join(
-                f"{name}={bound.arguments[name]}"
-                for name in KEY_ARGS
-                if bound.arguments.get(name) is not None
-            )
-            log.info(
-                "tool={}{} elapsed={}s",
-                func.__name__,
-                f" {shown}" if shown else "",
-                round(time.monotonic() - started, 3),
-            )
+            _log(started, args, kwargs)
 
     return wrapper
 
@@ -96,37 +114,69 @@ def _claim_cutoff() -> str:
     return (datetime.now(timezone.utc) - timedelta(minutes=CLAIM_TIMEOUT_MIN)).isoformat()
 
 
+def _sync_result(snapshot: dict) -> dict:
+    if snapshot.get("last_error"):
+        return {"synced": False, "error": snapshot["last_error"]}
+    result = snapshot.get("last_result") or {}
+    return {
+        "synced": True,
+        "events": result.get("events"),
+        "new": result.get("new"),
+        "updated": result.get("updated"),
+        "finished_at": snapshot.get("last_finished_at"),
+    }
+
+
+async def _wait_idle(get_snapshot) -> dict:
+    deadline = time.monotonic() + SYNC_WAIT_SEC
+    while time.monotonic() < deadline:
+        snapshot = await get_snapshot()
+        if snapshot.get("state") != "running":
+            return _sync_result(snapshot)
+        await asyncio.sleep(0.5)
+    return {"synced": False, "error": f"{SYNC_WAIT_SEC}초 안에 수집이 끝나지 않았습니다. 잠시 뒤 조회하세요."}
+
+
 @mcp.tool()
 @_logged
-def sync_now() -> dict:
-    """진행중 이벤트 목록을 지금 다시 수집한다(live 동기화, 5초 안팎). 수집은 15분마다 자동으로 돌므로 사용자가 '지금'·'최신' 기준을 요구할 때만 부른다. 백그라운드로 시작되고 바로 돌아오니, started가 true면 5~10초 뒤 list_events/events_on을 다시 호출한다(fetched_at으로 확인). already_running이면 기다렸다 조회하고, retry_after_sec이 있으면 그만큼 지나기 전엔 다시 부르지 않는다(직전 수집이 1분 이내라 이미 최신이다). 지난 이벤트 백필은 대시보드에서만 한다."""
+async def sync_now() -> dict:
+    """진행중 이벤트 목록을 지금 다시 수집한다(live 동기화). 대화에서 이벤트를 처음 조회하기 전에 한 번 부른다. 수집이 끝날 때까지 기다렸다가(보통 5초 안팎) 결과를 돌려주므로 바로 이어서 list_events/events_on을 호출하면 된다. synced가 true면 new(새 이벤트 수)·updated(바뀐 수)가 있고, retry_after_sec이 있으면 직전 수집이 1분 이내라 이미 최신이니 그냥 조회한다. already_running이면 다른 수집이 도는 중이니 몇 초 뒤 조회한다. 같은 대화에서 다시 부를 필요는 없다. 지난 이벤트 백필은 대시보드에서만 한다."""
     if SYNC_VIA_HTTP:
-        try:
-            res = httpx.post(f"{SERVER_URL}/api/scrape", params={"mode": "live"}, timeout=10.0)
-        except httpx.HTTPError:
-            return {"started": False, "error": f"서버({SERVER_URL})가 꺼져 있습니다. run.bat으로 띄운 뒤 다시 시도하세요."}
-        body = res.json()
-        if res.status_code == 202:
-            return {"started": True}
-        if res.status_code == 409:
-            return {"started": False, "already_running": True}
-        if res.status_code == 429:
-            return {"started": False, "retry_after_sec": body.get("retry_after_sec")}
-        return {"started": False, "error": body.get("error", str(res.status_code))}
+        async with httpx.AsyncClient(base_url=SERVER_URL, timeout=10.0) as client:
+            try:
+                res = await client.post("/api/scrape", params={"mode": "live"})
+            except httpx.HTTPError:
+                return {"synced": False, "error": f"서버({SERVER_URL})가 꺼져 있습니다. run.bat으로 띄운 뒤 다시 시도하세요."}
+            body = res.json()
+            if res.status_code == 409:
+                return {"synced": False, "already_running": True}
+            if res.status_code == 429:
+                return {"synced": False, "retry_after_sec": body.get("retry_after_sec")}
+            if res.status_code != 202:
+                return {"synced": False, "error": body.get("error", str(res.status_code))}
+
+            async def get_snapshot() -> dict:
+                return (await client.get("/api/crawl/status")).json()
+
+            return await _wait_idle(get_snapshot)
 
     try:
         crawl.start_background("live", "mcp")
     except crawl.AlreadyRunning:
-        return {"started": False, "already_running": True}
+        return {"synced": False, "already_running": True}
     except crawl.Debounced as exc:
-        return {"started": False, "retry_after_sec": exc.retry_after_sec}
-    return {"started": True}
+        return {"synced": False, "retry_after_sec": exc.retry_after_sec}
+
+    async def get_snapshot() -> dict:
+        return crawl.snapshot()
+
+    return await _wait_idle(get_snapshot)
 
 
 @mcp.tool()
 @_logged
 def list_events(target: str | None = None) -> dict:
-    """현재 진행 중인 한국투자증권 이벤트 목록. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접)."""
+    """현재 진행 중인 한국투자증권 이벤트 목록. 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접)."""
     conn = db.connect()
     try:
         return queries.list_events(conn, target)
@@ -137,7 +187,7 @@ def list_events(target: str | None = None) -> dict:
 @mcp.tool()
 @_logged
 def events_on(date: str, target: str | None = None) -> dict:
-    """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
+    """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 banner-summarizer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
     conn = db.connect()
     try:
         events = queries.events_on(conn, date, target)
