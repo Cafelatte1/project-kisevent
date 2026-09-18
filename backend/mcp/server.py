@@ -21,8 +21,9 @@ from backend.mcp.schema import SUMMARY_GUIDE, SUMMARY_SCHEMA_VERSION, SummaryV2
 INSTRUCTIONS = (
     "한국투자증권 이벤트 수집·요약 서버. 이벤트 내용은 배너 이미지 안에 있어, 질문에 답하기 전에 관련 이벤트의"
     " 배너가 요약돼 있어야 한다. 흐름: list_events 또는 events_on으로 대상 이벤트를 고른다 → 미요약이 있으면"
-    " list_pending_summaries로 image_id를 받는다 → Claude Code처럼 서브에이전트를 쓸 수 있으면 image_id마다"
-    " event-analyzer를 병렬로 띄우고, 아니면 get_summary_tiles → save_summary를 직접 순서대로 한다 →"
+    " list_pending_summaries로 image_id를 받는다 → Claude Code처럼 서브에이전트를 쓸 수 있으면 image_id를"
+    " 5개씩 묶어 묶음마다 event-analyzer를 병렬로 띄우고, 아니면 get_summary_tiles → save_summary를 직접"
+    " 순서대로 한다 →"
     " 다시 조회해 답한다. 대화에서 이벤트를 처음 조회하기 전에 sync_now를 한 번 불러 최신 목록을 받고"
     " 시작한다(완료까지 기다렸다 돌아오므로 바로 이어서 조회하면 된다). 같은 대화에서 다시 부를 필요는"
     " 없다."
@@ -176,7 +177,7 @@ async def sync_now() -> dict:
 @mcp.tool()
 @_logged
 def list_events(target: str | None = None) -> dict:
-    """현재 진행 중인 한국투자증권 이벤트 목록. 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 event-analyzer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접)."""
+    """현재 진행 중인 한국투자증권 이벤트 목록. 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. 대상은 배너 이미지 요약에서 얻으므로 요약 전 이벤트는 target_types가 null이다. target을 줘도 요약 전 이벤트(target_types null)는 대상이 확정되지 않았으므로 결과에 포함되며 pending_event_nums에 잡힌다 — 요약을 마친 뒤 다시 호출하면 그 대상만 남는다. 응답의 pending_summaries가 0보다 크면 아직 요약되지 않은 배너가 있다는 뜻이니, 사용자 질문에 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id를 5개씩 묶어 event-analyzer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접)."""
     conn = db.connect()
     try:
         return queries.list_events(conn, target)
@@ -187,7 +188,7 @@ def list_events(target: str | None = None) -> dict:
 @mcp.tool()
 @_logged
 def events_on(date: str, target: str | None = None) -> dict:
-    """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id마다 event-analyzer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
+    """특정 일자에 신청 기간이 걸려 있던 이벤트를 JSON으로 돌려준다(종료 이벤트 포함). 대화에서 처음 조회할 때는 sync_now를 먼저 한 번 부른다. date는 YYYY-MM-DD. target에 '영업점'·'뱅키스'·'연금'을 주면 그 대상만 돌려준다. notice에 요약되지 않은 이벤트 수와 번호가 있다 — 미요약 건이 있으면 답하기 전에 list_pending_summaries로 image_id를 받아 요약을 먼저 끝내라(Claude Code면 image_id를 5개씩 묶어 event-analyzer 서브에이전트를 병렬로, 아니면 get_summary_tiles → save_summary를 직접). 요약 전 이벤트는 target_types가 null이며, target을 줘도 대상이 확정되지 않았으므로 결과에 포함된다."""
     conn = db.connect()
     try:
         events = queries.events_on(conn, date, target)
@@ -219,7 +220,7 @@ def events_on(date: str, target: str | None = None) -> dict:
 @mcp.tool()
 @_logged
 def list_pending_summaries(limit: int = 20, event_nums: list[str] | None = None) -> dict:
-    """요약되지 않은 배너 이미지 목록(image_id, event_num, title). 진행중 이벤트가 먼저, 그다음 종료일 내림차순. event_nums를 주면 그 이벤트들만. Claude Code라면 이 목록의 image_id마다 event-analyzer 서브에이전트를 하나씩 병렬로 띄워라(건당 이미지 1장). 서브에이전트를 쓸 수 없는 환경이면 get_summary_tiles → save_summary를 image_id별로 직접 순서대로 수행한다."""
+    """요약되지 않은 배너 이미지 목록(image_id, event_num, title). 진행중 이벤트가 먼저, 그다음 종료일 내림차순. event_nums를 주면 그 이벤트들만. Claude Code라면 이 목록의 image_id를 5개씩 묶어 묶음마다 event-analyzer 서브에이전트를 하나씩 병렬로 띄워라(예: 12개 → 5·5·2로 3개). 서브에이전트를 쓸 수 없는 환경이면 get_summary_tiles → save_summary를 image_id별로 직접 순서대로 수행한다."""
     conn = db.connect()
     try:
         sql = SUMMARY_CANDIDATE_SQL
@@ -303,7 +304,7 @@ def get_summary_tiles(
 @mcp.tool()
 @_logged
 def save_summary(image_id: int, summary: dict) -> dict:
-    """schema_version 2 요약 저장. summary는 get_summary_tiles 안내문의 형식 그대로: {"analysis": str, "target": {"types": [영업점|뱅키스|연금…], "text": 참여대상 문구 원문, "conditions": [str], "exclusions": [str]}, "criteria": {"text": str, "products": [str], "performance": str|null} | null, "block_found": bool}. block_found가 true면 target.text는 비면 안 된다. 검증 실패면 errors를 돌려주니 고쳐서 다시 호출하라. 저장되면 그 이벤트의 대상(target_types)이 list_events·events_on에 반영된다."""
+    """schema_version 2 요약 저장. summary는 get_summary_tiles 안내문의 형식·순서 그대로: {"analysis": 이미지 서술, "block_found": bool, "target": {"types": [영업점|뱅키스|연금…], "text": 참여대상 문구 원문, "conditions": [str], "exclusions": [str]}, "criteria": {"text": str, "products": [str], "performance": str|null} | null}. block_found가 true면 target.text는 비면 안 되고, false면 target·criteria는 생략한다. 검증 실패면 errors를 돌려주니 고쳐서 다시 호출하라. 저장되면 그 이벤트의 대상(target_types)이 list_events·events_on에 반영된다."""
     try:
         parsed = SummaryV2.model_validate(summary)
     except ValidationError as exc:
