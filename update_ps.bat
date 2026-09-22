@@ -8,7 +8,7 @@ if exist "%~dp0pyproject.toml" (
 ) else (
     set "REPO=%USERPROFILE%\project-kisevent"
 )
-if not exist "%REPO%\.git" echo 레포가 없습니다: %REPO% - install.bat을 먼저 실행하세요. & goto :fail
+if not exist "%REPO%\.git" echo 레포가 없습니다: %REPO% - install_ps.bat 또는 install_cmd.bat을 먼저 실행하세요. & goto :fail
 cd /d "%REPO%"
 where uv >nul 2>&1 || set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 echo === KIS Event update (%REPO%) ===

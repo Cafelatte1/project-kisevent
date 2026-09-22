@@ -9,7 +9,7 @@ if exist "%~dp0pyproject.toml" (
 ) else (
     set "REPO=%USERPROFILE%\project-kisevent"
 )
-if not exist "%REPO%\pyproject.toml" echo 레포가 없습니다: %REPO% - install_v2.bat을 먼저 실행하세요. & goto :fail
+if not exist "%REPO%\pyproject.toml" echo 레포가 없습니다: %REPO% - install_cmd.bat을 먼저 실행하세요. & goto :fail
 cd /d "%REPO%"
 echo === KIS Event update - %REPO% ===
 echo.
@@ -26,7 +26,7 @@ if exist "%REPO%\.git" (
 set "UV="
 for /f "delims=" %%i in ('where uv 2^>nul') do if not defined UV set "UV=%%i"
 if not defined UV if exist "%USERPROFILE%\.local\bin\uv.exe" set "UV=%USERPROFILE%\.local\bin\uv.exe"
-if not defined UV echo uv를 찾을 수 없습니다. install_v2.bat을 먼저 실행하세요. & goto :fail
+if not defined UV echo uv를 찾을 수 없습니다. install_cmd.bat을 먼저 실행하세요. & goto :fail
 
 echo [2/3] 의존성 갱신 - uv sync...
 "%UV%" sync || goto :fail

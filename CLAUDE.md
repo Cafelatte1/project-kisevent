@@ -24,10 +24,10 @@ Collection never runs on its own (on demand). Two modes: `live` (called by MCP `
 - `docs/event-page-research.md` — site measurements and design decisions (Korean)
 - `SETUP.md` — install procedure for the serving PC (Windows, non-developer), executed by the agent (Korean)
 - `.mcp.json` — lets Claude Code pick up `kis-event` (HTTP `/mcp`) automatically in this folder
-- `install.bat` — Windows one-shot installer, standalone: when not run inside a clone it installs git (winget, else the official installer) and clones into `%USERPROFILE%\project-kisevent`; then installs uv if missing, `uv sync`, registers the `KISEvent` logon task and starts it, merges the `kis-event` stdio entry into `claude_desktop_config.json` (existing entries kept, `.bak` written), waits for `/api/health`. Uses PowerShell for the downloads and the JSON merge
-- `install_v2.bat` — the same installer for locked-down PCs, cmd-only: no PowerShell (policy blocks it with `Access is denied`) and no git (the source comes from the GitHub zip through `curl.exe`/`tar.exe`, so Windows 10 1803+ is required). uv comes from its release zip and the Desktop config merge runs as `scripts/register_desktop.py`
-- `update.bat` — Windows updater: `git fetch`/`pull --ff-only`, `uv sync`, restart the server through the `KISEvent` task (falls back to `run-hidden.vbs`), waits for `/api/health`
-- `update_v2.bat` — the updater for an `install_v2.bat` install: re-downloads the source zip over the checkout when there is no `.git`, leaving `data/` alone; the rest is the same
+- `install_ps.bat` — Windows one-shot installer, standalone: when not run inside a clone it installs git (winget, else the official installer) and clones into `%USERPROFILE%\project-kisevent`; then installs uv if missing, `uv sync`, registers the `KISEvent` logon task and starts it, merges the `kis-event` stdio entry into `claude_desktop_config.json` (existing entries kept, `.bak` written), waits for `/api/health`. Uses PowerShell for the downloads and the JSON merge
+- `install_cmd.bat` — the same installer for locked-down PCs, cmd-only: no PowerShell (policy blocks it with `Access is denied`) and no git (the source comes from the GitHub zip through `curl.exe`/`tar.exe`, so Windows 10 1803+ is required). uv comes from its release zip and the Desktop config merge runs as `scripts/register_desktop.py`
+- `update_ps.bat` — Windows updater: `git fetch`/`pull --ff-only`, `uv sync`, restart the server through the `KISEvent` task (falls back to `run-hidden.vbs`), waits for `/api/health`
+- `update_cmd.bat` — the updater for an `install_cmd.bat` install: re-downloads the source zip over the checkout when there is no `.git`, leaving `data/` alone; the rest is the same
 - `run.bat` / `run-hidden.vbs` — Windows: kill whatever holds port 4000 and start the server (the vbs runs it without a console, for Task Scheduler). `run.sh` — the same for macOS/Linux
 
 ## Commands (from the repo root)

@@ -53,7 +53,7 @@ echo [2/4] 의존성 설치 - uv sync...
 rem 3. server on logon (Task Scheduler) + start now
 echo [3/4] 서버 자동 실행 등록 - 작업 스케줄러 KISEvent...
 schtasks /Create /F /SC ONLOGON /TN "KISEvent" /TR "wscript.exe \"%REPO%\run-hidden.vbs\"" >nul || (
-    echo 작업 스케줄러 등록 실패. install_v2.bat을 마우스 오른쪽 - 관리자 권한으로 실행으로 다시 해 보세요.
+    echo 작업 스케줄러 등록 실패. install_cmd.bat을 마우스 오른쪽 - 관리자 권한으로 실행으로 다시 해 보세요.
     goto :fail
 )
 schtasks /Run /TN "KISEvent" >nul || goto :fail
