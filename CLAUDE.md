@@ -24,8 +24,8 @@ Collection never runs on its own (on demand). Two modes: `live` (called by MCP `
 - `docs/event-page-research.md` — site measurements and design decisions (Korean)
 - `SETUP.md` — install procedure for the serving PC (Windows, non-developer), executed by the agent (Korean)
 - `.mcp.json` — lets Claude Code pick up `kis-event` (HTTP `/mcp`) automatically in this folder
-- `install.bat` — Windows one-shot installer, standalone: when not run inside a clone it installs git (winget) and clones into `%USERPROFILE%\project-kisevent`; then installs uv if missing, `uv sync`, registers the `KISEvent` logon task and starts it, merges the `kis-event` stdio entry into `claude_desktop_config.json` (existing entries kept, `.bak` written), waits for `/api/health`
-- `update.bat` — Windows updater: `git fetch`/`pull --ff-only`, `uv sync`, restart the server through the `KISEvent` task (falls back to `run-hidden.vbs`), waits for `/api/health`
+- `install.bat` — Windows one-shot installer, standalone and cmd-only (no PowerShell, which locked-down PCs block; needs `curl.exe`/`tar.exe`, Windows 10 1803+): when not run inside a clone it clones into `%USERPROFILE%\project-kisevent` with git, or downloads the source zip when git is missing; installs uv from its release zip if missing, `uv sync`, registers the `KISEvent` logon task and starts it, merges the `kis-event` stdio entry into `claude_desktop_config.json` through `scripts/register_desktop.py` (existing entries kept, `.bak` written), waits for `/api/health`
+- `update.bat` — Windows updater: `git fetch`/`pull --ff-only` (or re-downloads the source zip over the checkout when there is no `.git`, leaving `data/` alone), `uv sync`, restart the server through the `KISEvent` task (falls back to `run-hidden.vbs`), waits for `/api/health`
 - `run.bat` / `run-hidden.vbs` — Windows: kill whatever holds port 4000 and start the server (the vbs runs it without a console, for Task Scheduler). `run.sh` — the same for macOS/Linux
 
 ## Commands (from the repo root)
