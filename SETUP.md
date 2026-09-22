@@ -6,7 +6,9 @@
 
 완료 기준: (1) 서버가 로그온 때마다 자동으로 떠서 `http://127.0.0.1:4000`에 대시보드가 열리고, (2) Claude Code·Claude Desktop(그리고 쓰면 Codex)에서 `kis-event` MCP 서버의 tool 7개가 보이며, (3) "지금 뱅키스 이벤트 뭐 있어?"에 답이 나온다.
 
-**Windows 지름길**: `install.bat` 하나만 받아 아무 위치에서 더블클릭하면 소스 내려받기(`%USERPROFILE%\project-kisevent` — git이 있으면 clone, 없으면 소스 zip)부터 1·2·3·5단계(uv 설치, `uv sync`, 작업 스케줄러 등록·서버 기동, Claude Desktop 설정 병합)까지 한 번에 한다. PowerShell을 쓰지 않으므로 사내 정책으로 PowerShell이 막힌 PC에서도 돈다(`curl.exe`·`tar.exe`가 필요 — Windows 10 1803 이상 기본 포함). 이미 클론한 폴더 안에서 실행하면 그 폴더를 쓴다. 이후 코드 업데이트는 `update.bat` 더블클릭 — 최신 코드 받기, `uv sync`, 서버 재시작까지 한다(Claude Desktop은 재시작해야 새 도구 설명을 읽는다). 끝나면 Claude Desktop을 완전히 재시작하고 6단계로 간다. 아래는 같은 일을 손으로 할 때의 절차다.
+**Windows 지름길**: `install.bat` 하나만 받아 아무 위치에서 더블클릭하면 git 설치·클론(`%USERPROFILE%\project-kisevent`)부터 1·2·3·5단계(uv 설치, `uv sync`, 작업 스케줄러 등록·서버 기동, Claude Desktop 설정 병합)까지 한 번에 한다. 이미 클론한 폴더 안에서 실행하면 그 폴더를 쓴다. 이후 코드 업데이트는 `update.bat` 더블클릭 — 최신 코드 받기, `uv sync`, 서버 재시작까지 한다(Claude Desktop은 재시작해야 새 도구 설명을 읽는다). 끝나면 Claude Desktop을 완전히 재시작하고 6단계로 간다. 아래는 같은 일을 손으로 할 때의 절차다.
+
+**사내 PC라 PowerShell이나 winget이 막혔다면** `install_v2.bat`을 쓴다. PowerShell도 git도 쓰지 않고 `curl.exe`·`tar.exe`(Windows 10 1803 이상 기본 포함)로 소스 zip과 uv를 받아 같은 결과를 만든다. 업데이트는 `update_v2.bat`.
 
 ## 0. 확인할 것
 - 레포 경로를 절대경로로 잡는다. 아래에서 `<REPO>`는 예: `C:\Users\me\project-kisevent`.
